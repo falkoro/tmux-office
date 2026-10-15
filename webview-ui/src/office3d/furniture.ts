@@ -152,7 +152,7 @@ class Decor {
   }
 
   line(paint: Paint, a: readonly number[], b: readonly number[], thick: number): this {
-    return this.put(this.solid, 'cyl', paint, span(a, b, thick));
+    return this.put(this.solid, 'post', paint, span(a, b, thick));
   }
 
   pool(paint: number, x: number, z: number, sx: number, sz = sx, y = 0.028): this {
@@ -187,7 +187,7 @@ function plant(d: Decor, r: Rng, size = 1, x = 0, z = 0): void {
     const len = (0.55 + r() * 0.35) * size;
     const reach = (len / 2) * Math.sin(tilt);
     d.s(
-      'sphere',
+      'ball',
       i % 2 ? leaf : other,
       x + Math.sin(a) * reach,
       h + (len / 2) * Math.cos(tilt),
