@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Demo office for UI work and screenshots: a private tmux server and a throwaway HOME
-# with sessions spread over several rooms. It never touches the default tmux server or ~/.claude*.
+# with sessions in every status. It never touches the default tmux server or ~/.claude*.
 # Rooms follow PIXEL_AGENTS_OFFICE_ROOMS (default work=work-*; set it empty for one room per session)
 # and pins follow PIXEL_AGENTS_OFFICE_PINNED (default work-8).
 #
