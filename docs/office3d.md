@@ -46,6 +46,9 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - `#work` focuses the room. `#work-8` focuses the pod. A room wins a name it shares with a session, so that session is `#session:work`. The hash follows back and forward.
 - A click picks the nearest desk or helper with a ray against boxes. It dismisses the bubble, toggles selection and calls `App.handleClick`, so the terminal panel opens as in the 2D view. Sub-agents route to their parent.
 - A drag past 6 px or a wheel counts as steering. A click does not freeze the auto-fit.
+- Walk on the room bar puts you at eye height in front of the focused room, or of the whole office when nothing is focused, looking in. You drag to look. W, A, S, D or the arrow keys move you, Shift runs, and Walk or Esc returns you to the overhead view.
+- You stay on the office floor, a short margin in from the side and back walls, or on the strip of ground in front of it. When you prefer reduced motion, the camera jumps in and out instead of gliding.
+- While you walk, a card or plaque shows only within 12 m and when no nearer desk hides it. CSS labels have no depth test, so far names would otherwise pile up on the horizon and float over near agents.
 
 ## Frame budget
 
@@ -84,4 +87,6 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - Twenty goblins on one desk reach the crew desks in front of it.
 - The 2D game loop does not run under 3D. A done or waiting bubble stays until the desk is clicked or the agent resumes.
 - The layout editor and the first-run tour fall back to the pixel view.
+- Walking passes through desks and furniture.
+- Touch can look around in walk mode, but it cannot walk.
 - Frame rates were only measured under SwiftShader. Real-GPU performance is not measured.
