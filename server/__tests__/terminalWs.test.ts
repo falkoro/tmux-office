@@ -283,4 +283,23 @@ describe('/ws/term attach', () => {
     });
     expect(frames.some((frame) => frame.binary)).toBe(true);
   }, 20_000);
+
+  it('closes the socket when the tmux client exits', async () => {
+    if (!handle) throw new Error('server did not start');
+    const socket = new WebSocket(
+      `ws://127.0.0.1:${handle.port}/ws/term?agentId=1&token=test-token`,
+    );
+    let closed = false;
+    socket.on('close', () => {
+      closed = true;
+    });
+    let throwaway = '';
+    await waitFor(async () => {
+      const names = await tmux(socketName, ['list-sessions', '-F', '#{session_name}']);
+      throwaway = names.split('\n').find((name) => name.startsWith('pa-web-')) ?? '';
+      return throwaway !== '';
+    });
+    await tmux(socketName, ['detach-client', '-s', throwaway]);
+    await waitFor(async () => closed);
+  }, 20_000);
 });

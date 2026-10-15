@@ -468,6 +468,7 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
           return;
         }
         attached = term;
+        term.pty.onExit(() => socket.close());
         socket.on('message', (data: unknown, isBinary: boolean) => {
           if (!isBinary || stopped) return;
           const bytes = toBuffer(data);
