@@ -12,7 +12,7 @@ import {
   MathUtils,
   Matrix4,
   Mesh,
-  MeshStandardMaterial,
+  MeshLambertMaterial,
   MOUSE,
   NeutralToneMapping,
   PCFShadowMap,
@@ -677,7 +677,7 @@ export class OfficeScene {
   private furnitureKey = '';
   private readonly key = new DirectionalLight(C.keyLight, 2.2);
   private readonly fog = new Fog(C.background, 60, 200);
-  private readonly ground: Mesh<PlaneGeometry, MeshStandardMaterial>;
+  private readonly ground: Mesh<PlaneGeometry, MeshLambertMaterial>;
   private readonly probe = new LightProbe(undefined, 0.4);
   private readonly rooms = new Map<string, RoomView>();
   private readonly desks = new Map<number, DeskView>();
@@ -769,7 +769,7 @@ export class OfficeScene {
 
     this.ground = new Mesh(
       new PlaneGeometry(400, 400).rotateX(-Math.PI / 2),
-      new MeshStandardMaterial({ color: C.ground, roughness: 1 }),
+      new MeshLambertMaterial({ color: C.ground }),
     );
     this.ground.receiveShadow = true;
     this.ground.matrixAutoUpdate = false;

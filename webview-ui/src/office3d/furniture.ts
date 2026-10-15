@@ -13,7 +13,7 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
-  MeshStandardMaterial,
+  MeshLambertMaterial,
   Quaternion,
   Vector3,
 } from 'three';
@@ -769,7 +769,8 @@ export function buildOffice(
 
   const group = new Group();
   const materials = [
-    new MeshStandardMaterial({ vertexColors: true, roughness: 0.8 }),
+    // Lambert: the PBR specular barely showed on these rough surfaces and cost 15% of a frame.
+    new MeshLambertMaterial({ vertexColors: true }),
     new MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
     new MeshBasicMaterial({
       vertexColors: true,
