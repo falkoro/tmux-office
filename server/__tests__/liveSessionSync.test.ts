@@ -22,7 +22,7 @@ function live(sessionId: string, name: string, paneId: string): LiveClaudeSessio
 }
 
 describe('syncLiveSessionMetadata', () => {
-  it("gives a teammate that shares its lead's session neither the lead's name nor its pane", () => {
+  it("gives a teammate that shares its lead's session the lead's pane but not its name", () => {
     const store = new AgentStateStore();
     store.set(1, agent(1, 'lead-session'));
     store.set(2, agent(2, 'lead-session', 1));
@@ -35,8 +35,8 @@ describe('syncLiveSessionMetadata', () => {
     syncLiveSessionMetadata(store, sessions);
 
     expect(store.get(1)?.registryName).toBe('zeta-c9');
-    expect(store.get(2)?.registryName).toBeUndefined();
-    expect(store.get(2)?.tmux).toBeUndefined();
+    expect(store.get(2)?.registryName).toBeNull();
+    expect(store.get(2)?.tmux?.paneId).toBe('%1');
     expect(store.get(3)?.registryName).toBe('researcher');
     expect(store.get(3)?.tmux?.paneId).toBe('%2');
   });
