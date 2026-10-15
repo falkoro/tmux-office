@@ -332,6 +332,7 @@ describe('clientMessageHandler: areas + carpet wire ordering', () => {
         type: 'officeRooms' as const,
         rooms: [{ name: 'work', patterns: ['work-*'] }],
         pinned: ['work-8'],
+        overseers: ['lead-*'],
         background: false,
       };
       const runtime = {

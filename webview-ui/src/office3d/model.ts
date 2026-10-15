@@ -33,6 +33,8 @@ export interface PodModel {
   id: string;
   title: string;
   pinned: boolean;
+  /** True when desks[0] oversees the rest. The no-pane pod shares no session, so it has none. */
+  hasOverseer: boolean;
   desks: DeskModel[];
 }
 
@@ -48,7 +50,7 @@ export const BACKGROUND_ROOM_TITLE = 'Background';
 export const NO_PANE_POD_ID = ':no-pane';
 export const NO_PANE_POD_TITLE = 'No tmux';
 
-export type OfficeConfig = Pick<OfficeRooms, 'rooms' | 'pinned' | 'background'>;
+export type OfficeConfig = Pick<OfficeRooms, 'rooms' | 'pinned' | 'overseers' | 'background'>;
 
 /** What the camera frames: a room, or one session's pod. Rooms and sessions can share a name. */
 export interface Focus {
@@ -133,7 +135,8 @@ function activityText(
  * or no matching room goes to the background, last, unless the config hides
  * the background. Inside a room, pinned pods come first, then sessions in
  * natural order, then the no-pane pod; desks in a pod sort by window, pane,
- * and agent id. Sub-agents ride along as helpers of
+ * and agent id, except that a session's overseer comes first: its first agent
+ * whose name matches `config.overseers`, else its first desk. Sub-agents ride along as helpers of
  * their parent's desk. `agentTools` supplies the human activity label
  * ("Reading App.tsx"); without it the bare tool name is used.
  */
@@ -189,6 +192,11 @@ export function deriveOffice(
     Number(a.id === NO_PANE_POD_ID) - Number(b.id === NO_PANE_POD_ID) ||
     naturalCompare(a.id, b.id);
   const pinned = config?.pinned ?? [];
+  const overseers = config?.overseers ?? [];
+  const overseerFirst = (sorted: DeskModel[]): DeskModel[] => {
+    const i = sorted.findIndex((d) => matchesRoomPattern(overseers, d.name));
+    return i <= 0 ? sorted : [sorted[i], ...sorted.slice(0, i), ...sorted.slice(i + 1)];
+  };
   const toPods = (roomDeskList: DeskModel[]): PodModel[] => {
     const bySession = new Map<string, DeskModel[]>();
     for (const desk of roomDeskList) {
@@ -202,7 +210,11 @@ export function deriveOffice(
         id,
         title: id === NO_PANE_POD_ID ? NO_PANE_POD_TITLE : id,
         pinned: id !== NO_PANE_POD_ID && matchesRoomPattern(pinned, id),
-        desks: podDesks.sort(paneOrder),
+        hasOverseer: id !== NO_PANE_POD_ID,
+        desks:
+          id === NO_PANE_POD_ID
+            ? podDesks.sort(paneOrder)
+            : overseerFirst(podDesks.sort(paneOrder)),
       }))
       .sort(podOrder);
   };

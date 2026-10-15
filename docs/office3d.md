@@ -7,6 +7,7 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - `deriveOffice` turns the live `OfficeState` characters into rooms of pods of desks with helpers. It is pure and covered by vitest.
 - `PIXEL_AGENTS_OFFICE_ROOMS` names the rooms. Entries are separated by `;`. `name=glob` puts every matching tmux session in that room, and globs are separated by commas or spaces. `work=work-*` puts every `work-*` session in one room named work. An entry without `=` is one room named after that text. A configured room stays even with nobody in it. Without the setting every session is a room.
 - A pod is one tmux session. It stands on its own rug with a sign that names it. The sign reads "SESSION" over the session name and draws above every desk label and badge, so the session is what you read first. A standing alert badge from the row in front can slip behind a sign; that desk's label still shows the status.
+- Each pod has one overseer. `PIXEL_AGENTS_OFFICE_OVERSEERS=lead-*` picks the first agent whose name matches. Without a match the agent in the lowest window leads. The overseer's desk sits alone at the back of the pod. Its crew sit at smaller desks in one row of up to four in front of it. Agents without tmux share no session, so their pod has no overseer.
 - `PIXEL_AGENTS_OFFICE_PINNED=work-8` pins sessions. A pinned pod sits alone in the front row of its room, centred. It gets a red rug, brass posts with a rope, and a diamond on its sign.
 - The Background is a porch behind the rooms, as wide as them. It has smaller desks, a railing and fairy lights. Agents without tmux work there.
 - `PIXEL_AGENTS_OFFICE_BACKGROUND=hide` drops the Background, so only agents in a room are shown.
@@ -19,9 +20,9 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - `characters.ts` is a self-contained kit. It imports only three and holds its own palette.
 - There are nine kinds: robot, cat, astronaut, wizard, chef, dog, penguin, frog and knight. Each is one skinned mesh on ten bones, so each costs one draw call.
 - A desk's default kind comes from a hash of its name. The colourway also comes from the name.
-- Each desk label has a picker. The choice is stored in localStorage under `pixel-agents.office3d.character:<name>`. Every storage access is wrapped in try/catch, so blocked storage falls back to the default.
-- The picker holds one option until it is opened. That keeps seventeen labels light.
-- Sub-agents are goblins: half-size helpers that stand beside their parent's desk and swing a hammer while they work. Nobody can pick the goblin for a desk.
+- A selected desk's label shows a picker. The choice is stored in localStorage under `pixel-agents.office3d.character:<name>`. Every storage access is wrapped in try/catch, so blocked storage falls back to the default.
+- The picker holds one option until it is opened, so a selected label stays light.
+- Sub-agents are goblins: half-size helpers that stand in rows of five in front of their parent's name card, facing you, and swing a hammer while they work. Nobody can pick the goblin for a desk.
 
 ## Status
 
@@ -36,7 +37,8 @@ The 3D office answers two questions at a glance: what is each session doing, and
 ## Labels and navigation
 
 - Labels are DOM through `CSS2DRenderer`. They stay crisp at any pixel ratio and are real buttons.
-- Density follows the desk pitch on screen. Full shows name, activity and picker. Compact shows the name. Roster replaces desk labels with a per-room name list.
+- A desk label is a paper name card on the desk's front panel. Its bottom edge takes the status colour, and an overseer's card has a brass edge and a star. Room and pod signs are wooden plaques.
+- Density follows the desk pitch on screen. Full shows name and activity. Compact shows the name. Roster replaces desk labels with a per-room name list.
 - A label is as wide as its own desk's pitch on screen, measured from that desk's depth, so the back row's narrower labels never overlap their neighbours. Names are never cut. A long name wraps at its hyphens.
 - On a phone the roster has two columns in floor that `planOffice` reserves in front of the pods.
 - The room bar lists the rooms. When one room is focused, or there is only one, it also lists that room's pods.
@@ -61,6 +63,9 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - Pod signs inside the rug: they covered the second line of compact names. Signs now hang from the rug's front edge.
 - A room label above the back wall: it covered the porch desks. It now hangs on the wall.
 - A single-column phone roster: it covered the pinned pod.
+- Name cards on the floor in front of each desk: the crew's badges painted over the overseer's card. Cards now hang on the desk front.
+- The crew in a two-by-two grid: a back crew desk's badge covered the card in front of it. The crew now sits in one row.
+- Goblins beside their parent's desk: the name card covered them. They now stand in front of it.
 - A depth foreshortening of 0.9 in the planner: it overestimated screen depth and laid rooms out in one wide, shallow row.
 
 ## Known weaknesses
@@ -69,6 +74,8 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - On a phone the roster's two-line names can cover the pinned pod's sign. The pinned desk itself stays in view.
 - On a phone the porch name list covers the porch desks.
 - A "?" badge on a back-row desk can overlap the label of the desk in front.
+- A session with more than four crew gets a second crew row, which brings that badge overlap back.
+- Twenty goblins on one desk reach the crew desks in front of it.
 - The 2D game loop does not run under 3D. A done or waiting bubble stays until the desk is clicked or the agent resumes.
 - The layout editor and the first-run tour fall back to the pixel view.
 - Frame rates were only measured under SwiftShader. Real-GPU performance is not measured.

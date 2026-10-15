@@ -1,6 +1,6 @@
 # tmux office
 
-A 3D office for the Claude Code sessions in your tmux. Each tmux session is a pod with a sign. Each agent sits at a desk and acts out what it is doing. Its sub-agents are goblins that hammer beside it.
+A 3D office for the Claude Code sessions in your tmux. Each tmux session is a pod with a sign. One agent per session oversees it from the back of the pod, and the rest of its crew sit in front. Each agent acts out what it is doing. Its sub-agents are goblins that hammer in front of its desk.
 
 ![Seven tmux sessions in one room, a pinned session in front, and three agents on the porch behind them](docs/office3d/office.png)
 
@@ -18,7 +18,7 @@ tmux office is built on [Pixel Agents](https://github.com/pixel-agents-hq/pixel-
 
 - A pod's sign reads **SESSION** over the tmux session name. Signs draw above every desk label, so you read the session first.
 - Click a desk to open its tmux pane in a terminal panel, where you can watch and type. The panel needs Cloudflare Access or `--insecure-local-terminal`. See [Expose it safely](#expose-it-safely).
-- Each desk label has a character picker: astronaut, cat, chef, dog, frog, knight, penguin, robot, or wizard. Your browser remembers the choice per agent name. Goblins are for sub-agents only.
+- Click a desk to select it. Its label then shows a character picker: astronaut, cat, chef, dog, frog, knight, penguin, robot, or wizard. Your browser remembers the choice per agent name. Goblins are for sub-agents only.
 - Add `#work` to the URL to focus the room `work`, or `#work-1` to focus one session. A session named like a room is `#session:<name>`.
 - Add `?view=pixel` to the URL for the original pixel office.
 
@@ -49,7 +49,7 @@ scripts/office-demo-rig.sh start demo 3199
 
 The rig prints the office URL. It runs fake agents on a private tmux server (`tmux -L pa-demo-demo`) with a throwaway `HOME`, so it never touches your tmux server or `~/.claude`. The terminal panel works in the demo. To stop the rig, run `scripts/office-demo-rig.sh stop demo`.
 
-## Configure rooms and pins
+## Configure rooms, pins, and overseers
 
 Set these environment variables before you start the server.
 
@@ -57,6 +57,7 @@ Set these environment variables before you start the server.
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PIXEL_AGENTS_OFFICE_ROOMS`      | Groups tmux sessions into rooms. Separate entries with `;`. `name=glob` puts every matching session in a room called `name`, and `*` matches any text. Without it, every session is a room. |
 | `PIXEL_AGENTS_OFFICE_PINNED`     | Sessions to pin, as names or globs separated by commas or spaces. A pinned session sits alone in the front row of its room, on a red rug.                                                   |
+| `PIXEL_AGENTS_OFFICE_OVERSEERS`  | Globs over agent names, separated by commas or spaces. In each session the first agent whose name matches is the overseer. Without a match, the agent in the lowest window is.              |
 | `PIXEL_AGENTS_OFFICE_BACKGROUND` | `hide` drops the porch. The porch holds agents outside tmux and sessions that match no room.                                                                                                |
 | `PIXEL_AGENTS_TMUX_SOCKET`       | The tmux socket to read, as in `tmux -L <name>`. Without it, the server reads the default tmux server.                                                                                      |
 

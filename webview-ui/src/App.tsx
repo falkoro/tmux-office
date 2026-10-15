@@ -364,7 +364,10 @@ function App() {
   const show3D = prefer3D && !editor.isEditMode && !intro;
 
   return (
-    <div className={showTerminal ? 'office-shell' : 'w-full h-full'}>
+    <div
+      className={showTerminal ? 'office-shell' : 'w-full h-full'}
+      data-view={show3D ? '3d' : 'pixel'}
+    >
       <div
         ref={containerRef}
         className={showTerminal ? 'office-stage' : 'w-full h-full relative overflow-hidden'}

@@ -31,6 +31,7 @@ const rooms = {
   type: 'officeRooms' as const,
   rooms: [{ name: 'work', patterns: ['work-*'] }],
   pinned: ['work-8'],
+  overseers: ['lead-*'],
   background: false,
 };
 

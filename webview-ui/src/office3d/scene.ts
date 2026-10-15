@@ -44,7 +44,7 @@ import {
   OFFICE3D_FOCUS_DURATION_MS,
   OFFICE3D_FULL_LABEL_PX,
   OFFICE3D_HELPER_SCALE,
-  OFFICE3D_HELPERS_PER_COLUMN,
+  OFFICE3D_HELPERS_PER_ROW,
   OFFICE3D_INSET_BOTTOM_PX,
   OFFICE3D_INSET_SIDE_PX,
   OFFICE3D_INSET_TOP_PX,
@@ -134,11 +134,12 @@ const HEAT_ORDER: readonly DeskStatus[] = [
 ];
 
 // Desk-local heights and offsets, in metres at desk scale 1.
-const LABEL_Z = 0.95;
+/** A desk's name card hangs on the desk's front panel, clear of the crew row in front. */
+const LABEL_Y = 0.36;
+const LABEL_Z = 0.5;
 const BADGE_SEATED_Y = 1.4;
 const BADGE_STANDING_Y = 1.85;
 const HELPER_BADGE_Y = 1.45;
-const HELPER_TURN = -0.7;
 /** Tallest thing a camera fit keeps in view: the back walls and their labels. */
 const FIT_HEIGHT = OFFICE3D_WALL_HEIGHT + 0.4;
 
@@ -314,19 +315,20 @@ class DeskView {
       if (isCharacterKind(kind)) ctx.choose(this.name, kind);
     });
     const label = new CSS2DObject(this.el);
-    label.position.set(0, 0, LABEL_Z);
+    label.position.set(0, LABEL_Y, LABEL_Z);
     this.badgeEl = el('div', 'o3d-badge');
     this.badge = new CSS2DObject(this.badgeEl);
     this.badge.position.set(0, BADGE_SEATED_Y, SEAT_Z);
     this.group.add(label, this.badge);
   }
 
-  place(spot: DeskSpot): void {
+  place(spot: DeskSpot, background: boolean): void {
     const s = spot.scale;
     this.group.position.set(spot.x, FLOOR, spot.z);
     this.group.scale.setScalar(s);
     this.group.updateMatrix();
-    this.el.dataset.background = String(s < 1);
+    this.el.dataset.background = String(background);
+    this.el.dataset.overseer = String(spot.overseer);
     this.hit.setFromCenterAndSize(
       V.set(spot.x, FLOOR + 0.75 * s, spot.z - 0.1 * s),
       V2.set(1.5 * s, 1.5 * s, 1.4 * s),
@@ -419,7 +421,6 @@ class DeskView {
         );
         const group = new Group();
         group.scale.setScalar(OFFICE3D_HELPER_SCALE);
-        group.rotation.y = HELPER_TURN;
         group.add(actor.character.mesh);
         const badgeEl = el('div', 'o3d-badge o3d-badge-small');
         const badge = new CSS2DObject(badgeEl);
@@ -443,13 +444,19 @@ class DeskView {
     this.placeHelpers();
   }
 
+  /** Helpers work in rows in front of the desk's name card, where the card can't hide them. */
   private placeHelpers(): void {
     const s = this.group.scale.x;
     const p = this.group.position;
+    const n = this.helperList.length;
     this.helperList.forEach((h, i) => {
-      const x = 0.95 + Math.floor(i / OFFICE3D_HELPERS_PER_COLUMN) * 0.3;
-      const z = -0.55 + (i % OFFICE3D_HELPERS_PER_COLUMN) * 0.35;
+      // ponytail: four rows reach the crew desks in front; spill sideways if a desk ever runs 20 sub-agents.
+      const row = Math.floor(i / OFFICE3D_HELPERS_PER_ROW);
+      const inRow = Math.min(OFFICE3D_HELPERS_PER_ROW, n - row * OFFICE3D_HELPERS_PER_ROW);
+      const x = ((i % OFFICE3D_HELPERS_PER_ROW) - (inRow - 1) / 2) * 0.42;
+      const z = 1.1 + row * 0.32;
       h.group.position.set(x, 0, z);
+      h.group.rotation.y = Math.PI;
       h.hit.setFromCenterAndSize(
         V.set(p.x + x * s, p.y + 0.3 * s, p.z + z * s),
         V2.set(0.45 * s, 0.6 * s, 0.45 * s),
@@ -512,7 +519,7 @@ class RoomView {
       ctx.focus({ kind: 'room', id });
     });
     this.label = new CSS2DObject(this.labelEl);
-    // Hangs from the top of the back wall (the porch railing), so it never reaches the room behind.
+    // Hangs on the back wall (or the porch railing), below the signs of the porch behind it.
     this.label.center.set(0.5, 0);
     // When desks are too small on screen for their own labels, the room lists
     // its agents instead: one readable line each, still clickable.
@@ -525,7 +532,7 @@ class RoomView {
 
   place(spot: RoomSpot): void {
     const top = spot.z - spot.depth / 2;
-    const y = spot.background ? FLOOR + 1.2 : FLOOR + OFFICE3D_WALL_HEIGHT;
+    const y = spot.background ? FLOOR + 1.2 : FLOOR + OFFICE3D_WALL_HEIGHT * 0.6;
     this.label.position.set(spot.x, y, top);
     this.roster.position.set(spot.x, FLOOR, spot.z + spot.depth / 2 - 0.15);
     // The list may spill into the gap between rooms, never past half of it.
@@ -1018,7 +1025,7 @@ export class OfficeScene {
     this.plan = planOffice(this.snapshot.rooms, this.camera.aspect);
     for (const spot of this.plan.rooms) {
       this.rooms.get(spot.id)?.place(spot);
-      for (const d of spot.desks) this.desks.get(d.agentId)?.place(d);
+      for (const d of spot.desks) this.desks.get(d.agentId)?.place(d, spot.background);
     }
 
     const names = new Map<number, string>();

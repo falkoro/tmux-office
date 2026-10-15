@@ -2,11 +2,11 @@ import assert from 'node:assert/strict';
 
 import { describe, test } from 'vitest';
 
-import { OFFICE3D_ROSTER_LINE_DEPTH } from '../src/constants.js';
+import { OFFICE3D_CREW_SCALE, OFFICE3D_ROSTER_LINE_DEPTH } from '../src/constants.js';
 import type { OfficePlan, RoomSpot } from '../src/office3d/layout.js';
 import { fitKey, planOffice } from '../src/office3d/layout.js';
 import type { DeskModel, PodModel, RoomModel } from '../src/office3d/model.js';
-import { BACKGROUND_ROOM_ID } from '../src/office3d/model.js';
+import { BACKGROUND_ROOM_ID, NO_PANE_POD_ID } from '../src/office3d/model.js';
 
 const DESKTOP = 1600 / 900;
 const PHONE = 390 / 844;
@@ -17,6 +17,7 @@ function pod(id: string, desks: number, pinned = false): PodModel {
     id,
     title: id,
     pinned,
+    hasOverseer: id !== NO_PANE_POD_ID,
     desks: Array.from({ length: desks }, (): DeskModel => ({
       agentId: nextId++,
       name: 'a',
@@ -216,6 +217,27 @@ describe('planOffice', () => {
     assert.equal(r.pods[0].x, r.x);
   });
 
+  test('a session puts its overseer alone at the back and its smaller crew in front', () => {
+    for (const aspect of [DESKTOP, PHONE]) {
+      const p = planOffice([room('a', pod('a', 4))], aspect).rooms[0].pods[0];
+      const [lead, ...crew] = p.desks;
+      assert.ok(lead.overseer && crew.every((d) => !d.overseer));
+      assert.equal(lead.x, p.x);
+      assert.equal(lead.scale, 1);
+      assert.ok(crew.every((d) => d.scale === OFFICE3D_CREW_SCALE && d.z > lead.z));
+      assert.deepEqual(
+        crew.map((d) => d.z),
+        [crew[0].z, crew[0].z, crew[0].z],
+      );
+    }
+  });
+
+  test('agents without a pane have no overseer', () => {
+    const p = planOffice([room(BACKGROUND_ROOM_ID, pod(NO_PANE_POD_ID, 3))], DESKTOP).rooms[0]
+      .pods[0];
+    assert.ok(p.desks.every((d) => !d.overseer && d.z === p.desks[0].z));
+  });
+
   test('an empty office and an empty room still plan', () => {
     assert.deepEqual(planOffice([], 1).rooms, []);
     const plan = planOffice([room('empty'), ...rooms(2)], DESKTOP);
@@ -234,7 +256,9 @@ describe('planOffice', () => {
       assert.ok(grid.every((r) => r.z - r.depth / 2 > porch.z + porch.depth / 2));
       assert.equal(porch.width, plan.width);
       assert.ok(porch.desks.every((d) => d.scale < 1));
-      assert.ok(grid.every((r) => r.desks.every((d) => d.scale === 1)));
+      assert.ok(
+        grid.every((r) => r.desks.every((d) => d.scale === (d.overseer ? 1 : OFFICE3D_CREW_SCALE))),
+      );
     }
   });
 

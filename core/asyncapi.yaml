@@ -179,13 +179,13 @@ components:
 
     OfficeRooms:
       description: |
-        Named rooms and pinned sessions for the 3D office. The server sends this
-        after `webviewReady` when any of them is configured. Agents whose tmux
-        session matches no room work in the background, or are hidden when
-        `background` is false. With no rooms, every session is a room.
+        Named rooms, pinned sessions, and overseers for the 3D office. The server
+        sends this after `webviewReady` when any of them is configured. Agents
+        whose tmux session matches no room work in the background, or are hidden
+        when `background` is false. With no rooms, every session is a room.
       type: object
       additionalProperties: false
-      required: [type, rooms, pinned, background]
+      required: [type, rooms, pinned, overseers, background]
       properties:
         type:
           const: officeRooms
@@ -195,6 +195,13 @@ components:
             $ref: '#/components/schemas/OfficeRoom'
         pinned:
           description: Globs over tmux session names. Matching sessions are shown first and marked.
+          type: array
+          items:
+            type: string
+        overseers:
+          description: |
+            Globs over agent names. In each tmux session, the first agent whose name
+            matches oversees the others. With no match, the agent in the lowest window does.
           type: array
           items:
             type: string

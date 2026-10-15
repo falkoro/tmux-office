@@ -1,6 +1,8 @@
 import {
   OFFICE3D_BACKGROUND_ROSTER_PER_LINE,
   OFFICE3D_BACKGROUND_SCALE,
+  OFFICE3D_CREW_PER_ROW,
+  OFFICE3D_CREW_SCALE,
   OFFICE3D_DEPTH_FORESHORTEN,
   OFFICE3D_DESK_PITCH_X,
   OFFICE3D_DESK_PITCH_Z,
@@ -24,8 +26,12 @@ export interface DeskSpot {
   agentId: number;
   x: number;
   z: number;
-  /** 1 in a room, OFFICE3D_BACKGROUND_SCALE in the background. Spacing across stays the same so labels fit. */
+  /**
+   * 1 for an overseer, OFFICE3D_CREW_SCALE for its crew, times OFFICE3D_BACKGROUND_SCALE
+   * in the background. Smaller desks keep the spacing across, so labels fit.
+   */
   scale: number;
+  overseer: boolean;
 }
 
 interface Rect {
@@ -93,22 +99,58 @@ export const fitKey = (plan: OfficePlan, focus: Focus | null): string =>
 export const podColumns = (desks: number): number =>
   desks <= 3 ? Math.max(1, desks) : Math.ceil(Math.sqrt(desks));
 
+/** A desk spot relative to its pod: dx from the centre line, dz from the back edge. */
+type Slot = Omit<DeskSpot, 'x' | 'z'> & { dx: number; dz: number };
+
 interface PodBox {
   pod: PodModel;
   width: number;
   depth: number;
+  slots: Slot[];
 }
 
+/**
+ * A pod's overseer sits alone at the back; its crew sits in front of it at
+ * OFFICE3D_CREW_SCALE, up to OFFICE3D_CREW_PER_ROW to a row. A pod without an
+ * overseer is a plain grid of podColumns.
+ */
 function podBox(pod: PodModel, scale: number): PodBox {
-  const n = pod.desks.length;
-  const cols = podColumns(n);
+  const pitchZ = OFFICE3D_DESK_PITCH_Z * scale;
+  const [overseer, ...crew] = pod.desks;
+  const led = pod.hasOverseer && overseer !== undefined;
+  const rest = led ? crew : pod.desks;
+  const deskScale = led ? scale * OFFICE3D_CREW_SCALE : scale;
+  const cols = Math.max(
+    1,
+    led ? Math.min(rest.length, OFFICE3D_CREW_PER_ROW) : podColumns(rest.length),
+  );
+  const front = OFFICE3D_POD_PAD + (led ? pitchZ : 0);
+  const slots = rest.map((desk, d): Slot => {
+    const r = Math.floor(d / cols);
+    const inRow = Math.min(cols, rest.length - r * cols);
+    return {
+      agentId: desk.agentId,
+      dx: ((d % cols) - (inRow - 1) / 2) * OFFICE3D_DESK_PITCH_X,
+      dz: front + (r + 0.5) * pitchZ,
+      scale: deskScale,
+      overseer: false,
+    };
+  });
+  if (led) {
+    slots.unshift({
+      agentId: overseer.agentId,
+      dx: 0,
+      dz: OFFICE3D_POD_PAD + pitchZ / 2,
+      scale,
+      overseer: true,
+    });
+  }
+  const rows = (led ? 1 : 0) + Math.ceil(rest.length / cols);
   return {
     pod,
+    slots,
     width: cols * OFFICE3D_DESK_PITCH_X + 2 * OFFICE3D_POD_PAD,
-    depth:
-      Math.ceil(Math.max(1, n) / cols) * OFFICE3D_DESK_PITCH_Z * scale +
-      OFFICE3D_POD_PAD +
-      OFFICE3D_POD_SIGN_DEPTH,
+    depth: OFFICE3D_POD_PAD + Math.max(1, rows) * pitchZ + OFFICE3D_POD_SIGN_DEPTH,
   };
 }
 
@@ -216,9 +258,6 @@ function placeShape(shape: RoomShape, x: number, top: number, depth: number): Ro
       const cx = left + box.width / 2;
       // Pods in a row line up at the front, so their signs read as one line.
       const top = z + depth - box.depth;
-      const n = box.pod.desks.length;
-      const cols = podColumns(n);
-      const pitchZ = OFFICE3D_DESK_PITCH_Z * shape.scale;
       pods.push({
         id: box.pod.id,
         pinned: box.pod.pinned,
@@ -226,16 +265,7 @@ function placeShape(shape: RoomShape, x: number, top: number, depth: number): Ro
         z: top + box.depth / 2,
         width: box.width,
         depth: box.depth,
-        desks: box.pod.desks.map((desk, d) => {
-          const r = Math.floor(d / cols);
-          const inRow = Math.min(cols, n - r * cols);
-          return {
-            agentId: desk.agentId,
-            x: cx + ((d % cols) - (inRow - 1) / 2) * OFFICE3D_DESK_PITCH_X,
-            z: top + OFFICE3D_POD_PAD + (r + 0.5) * pitchZ,
-            scale: shape.scale,
-          };
-        }),
+        desks: box.slots.map(({ dx, dz, ...slot }) => ({ ...slot, x: cx + dx, z: top + dz })),
       });
       left += box.width + OFFICE3D_POD_GAP;
     }

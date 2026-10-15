@@ -276,14 +276,17 @@ async function main(): Promise<void> {
     }
     const rooms = parseRoomConfig(process.env.PIXEL_AGENTS_OFFICE_ROOMS);
     const pinned = parseGlobs(process.env.PIXEL_AGENTS_OFFICE_PINNED);
+    const overseers = parseGlobs(process.env.PIXEL_AGENTS_OFFICE_OVERSEERS);
     const background = parseBackground(process.env.PIXEL_AGENTS_OFFICE_BACKGROUND);
-    if (rooms.length > 0 || pinned.length > 0 || !background) {
-      runtime.officeRooms = { type: 'officeRooms', rooms, pinned, background };
+    if (rooms.length > 0 || pinned.length > 0 || overseers.length > 0 || !background) {
+      runtime.officeRooms = { type: 'officeRooms', rooms, pinned, overseers, background };
       console.log(
         `[Pixel Agents] Office rooms: ${
           rooms.map((room) => `${room.name} (${room.patterns.join(', ')})`).join('; ') ||
           'one per session'
-        }; pinned: ${pinned.join(', ') || 'none'}; background: ${background ? 'shown' : 'hidden'}`,
+        }; pinned: ${pinned.join(', ') || 'none'}; overseers: ${
+          overseers.join(', ') || 'lowest window'
+        }; background: ${background ? 'shown' : 'hidden'}`,
       );
     }
 

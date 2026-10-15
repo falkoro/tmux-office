@@ -338,6 +338,7 @@ export interface OfficeRooms {
   type: 'officeRooms';
   rooms: OfficeRoom[];
   pinned: string[];
+  overseers: string[];
   background: boolean;
 }
 

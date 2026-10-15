@@ -42,8 +42,13 @@ function char(id: number, extra: Partial<Character> = {}): Character {
   } as Character;
 }
 
-function cfg(rooms: OfficeConfig['rooms'], pinned: string[] = [], background = true): OfficeConfig {
-  return { rooms, pinned, background };
+function cfg(
+  rooms: OfficeConfig['rooms'],
+  pinned: string[] = [],
+  background = true,
+  overseers: string[] = [],
+): OfficeConfig {
+  return { rooms, pinned, overseers, background };
 }
 
 function pane(session: string, windowId = '@1', paneId = '%1'): TerminalMeta['tmux'] {
@@ -286,6 +291,39 @@ describe('deriveOffice', () => {
     );
   });
 
+  test('a session is led by its first agent whose name matches an overseer glob, else its lowest window', () => {
+    const chars = [
+      char(1, { tmux: pane('work-1', '@1') }),
+      char(2, { tmux: pane('work-1', '@2') }),
+      char(3, { tmux: pane('work-1', '@3') }),
+      char(4, { tmux: pane('work-2', '@4') }),
+      char(5, { tmux: pane('work-2', '@5') }),
+    ];
+    const terminals: Record<number, TerminalMeta> = {
+      1: { name: 'crew-a', tmux: pane('work-1', '@1') },
+      2: { name: 'lead-b', tmux: pane('work-1', '@2') },
+      3: { name: 'lead-c', tmux: pane('work-1', '@3') },
+      4: { name: 'crew-d', tmux: pane('work-2', '@4') },
+      5: { name: 'crew-e', tmux: pane('work-2', '@5') },
+    };
+    const work = cfg([{ name: 'work', patterns: ['work-*'] }], [], true, ['lead-*']);
+    assert.deepEqual(
+      deriveOffice(chars, terminals, {}, work)[0].pods.map((p) => [
+        p.id,
+        p.hasOverseer,
+        p.desks.map((d) => d.name),
+      ]),
+      [
+        ['work-1', true, ['lead-b', 'crew-a', 'lead-c']],
+        ['work-2', true, ['crew-d', 'crew-e']],
+      ],
+    );
+    assert.deepEqual(
+      deriveOffice(chars, terminals, {}, null)[0].pods[0].desks.map((d) => d.name),
+      ['crew-a', 'lead-b', 'lead-c'],
+    );
+  });
+
   test('agents without a pane share one pod, last in the background', () => {
     const rooms = deriveOffice(
       [char(3), char(2, { tmux: pane('scratch') }), char(1)],
@@ -294,10 +332,10 @@ describe('deriveOffice', () => {
       cfg([{ name: 'work', patterns: ['work-*'] }]),
     );
     assert.deepEqual(
-      rooms[rooms.length - 1].pods.map((p) => [p.id, p.desks.map((d) => d.agentId)]),
+      rooms[rooms.length - 1].pods.map((p) => [p.id, p.hasOverseer, p.desks.map((d) => d.agentId)]),
       [
-        ['scratch', [2]],
-        [NO_PANE_POD_ID, [1, 3]],
+        ['scratch', true, [2]],
+        [NO_PANE_POD_ID, false, [1, 3]],
       ],
     );
   });

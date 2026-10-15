@@ -324,7 +324,7 @@ export const TERMINAL_FG = '#e6e6f0';
 export const TERMINAL_CURSOR = '#746fff';
 
 // ── 3D office ────────────────────────────────────────────────
-/** Desk slot inside a pod (world metres): one desk, its chair, and room for helpers beside it. */
+/** Desk slot inside a pod (world metres): one desk, its chair, and room for helpers in front of it. */
 export const OFFICE3D_DESK_PITCH_X = 2.4;
 export const OFFICE3D_DESK_PITCH_Z = 2.6;
 /** Rug margin around a pod's desks, and the band in front of them that holds the pod's sign. */
@@ -343,8 +343,11 @@ export const OFFICE3D_FLOOR_Y = 0.06;
 export const OFFICE3D_DESK_HEIGHT = 0.6;
 export const OFFICE3D_DESK_Z = 0.18;
 export const OFFICE3D_SEAT_Z = -0.38;
-/** Sub-agent helpers stand beside their parent's desk at this size. */
+/** Sub-agent helpers stand in front of their parent's desk at this size. */
 export const OFFICE3D_HELPER_SCALE = 0.5;
+/** A crew desk's size next to its session's overseer, and crew desks per row in front of it. */
+export const OFFICE3D_CREW_SCALE = 0.75;
+export const OFFICE3D_CREW_PER_ROW = 4;
 export const OFFICE3D_BEAM_HEIGHT = 5;
 /** Seconds a character takes to move from one status pose to the next. */
 export const OFFICE3D_POSE_BLEND_S = 0.45;
@@ -361,8 +364,8 @@ export const OFFICE3D_NARROW_ROSTER_COLUMNS = 2;
 export const OFFICE3D_BACKGROUND_SCALE = 0.65;
 /** Porch names per roster line on wide viewports, where that list wraps across the porch. */
 export const OFFICE3D_BACKGROUND_ROSTER_PER_LINE = 5;
-/** Helpers per column beside their parent's desk. */
-export const OFFICE3D_HELPERS_PER_COLUMN = 3;
+/** Helpers per row in front of their parent's desk label. */
+export const OFFICE3D_HELPERS_PER_ROW = 5;
 /** Default camera tilt from straight down, wide and narrow viewports (radians). */
 export const OFFICE3D_CAMERA_POLAR = 0.78;
 export const OFFICE3D_CAMERA_POLAR_NARROW = 0.5;
