@@ -49,6 +49,14 @@ export type CharacterMood = 'work' | 'alert' | 'ask' | 'cheer' | 'rest' | 'doze'
 
 /** Top of the seat a seated character sits on, in character units (about a metre tall). */
 export const CHARACTER_SEAT_HEIGHT = 0.475;
+/** Hip and head centre of a standing character, in the same units. */
+export const CHARACTER_HIP_Y = 0.3;
+export const CHARACTER_HEAD_Y = 0.81;
+/**
+ * Crown above the head centre. The astronaut helmet is the tallest head:
+ * it sits 0.01 above the centre and its height is 0.48.
+ */
+export const CHARACTER_HEAD_HALF = 0.01 + 0.48 / 2;
 /** How long the one-off cheer lasts before the host should switch to 'rest'. */
 export const CHEER_SECONDS = 1.8;
 /** Pose channels: fill a Float32Array of this length and pass it to `Character.apply`. */
@@ -197,9 +205,9 @@ const ACC = 7;
 const EYES = 8;
 const ACC2 = 9;
 
-const HIP_Y = 0.3;
+const HIP_Y = CHARACTER_HIP_Y;
 const NECK_Y = 0.62;
-const HEAD_Y = 0.81;
+const HEAD_Y = CHARACTER_HEAD_Y;
 const SHOULDER: readonly number[] = [0.205, 0.565, 0];
 const HAND: readonly number[] = [0.235, 0.33, 0.01];
 const LEG_X = 0.085;

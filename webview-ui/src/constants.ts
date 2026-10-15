@@ -396,6 +396,33 @@ export const OFFICE3D_INSET_BOTTOM_PX = 72;
 export const OFFICE3D_INSET_SIDE_PX = 14;
 /** localStorage key prefix for a viewer's character choice, per desk name. */
 export const OFFICE3D_CHARACTER_KEY = 'pixel-agents.office3d.character:';
+/**
+ * Eye height while walking, in metres: a little (0.15) above a seated overseer's crown.
+ * Crown = floor + seat + (head centre - hip) + helmet half-height.
+ * The walk test pins this to those sizes in characters.ts.
+ */
+export const OFFICE3D_WALK_EYE_Y =
+  OFFICE3D_FLOOR_Y + 0.475 + (0.81 - 0.3) + (0.01 + 0.48 / 2) + 0.15;
+/** Walk speed in metres per second. */
+export const OFFICE3D_WALK_SPEED = 1.6;
+/** Speed multiplier while Shift is held. */
+export const OFFICE3D_WALK_RUN = 1.8;
+/** Radians the view turns per pixel of pointer drag. */
+export const OFFICE3D_WALK_LOOK_SENS = 0.0028;
+/** Largest look up or down while walking, in radians, so the view cannot flip. */
+export const OFFICE3D_WALK_TILT = 1.25;
+/** Look down this many radians on entry, so the room fills the frame instead of the dark above it. */
+export const OFFICE3D_WALK_ENTRY_PITCH = -0.22;
+/** Metres within which labels show while walking. Farther ones pile up on the horizon. */
+export const OFFICE3D_WALK_LABEL_RANGE = 12;
+/** Metres kept between the walker and the edge of the office floor. */
+export const OFFICE3D_WALK_MARGIN = 0.45;
+/** Metres of ground in front of the office you can stand on. Walk mode starts there, looking in, because inside every spot has a desk or a lamp in your face. */
+export const OFFICE3D_WALK_PORCH = 2.5;
+/** Metres ahead of the walker the orbit target sits, so fog and label density stay put. */
+export const OFFICE3D_WALK_LOOK = 6;
+/** Vertical field of view while walking. The orbit view's 34 degrees fills the frame with the nearest desk. */
+export const OFFICE3D_WALK_FOV = 60;
 
 export const OFFICE3D_STATUS_COLORS = {
   working: 0x4da3ff,
