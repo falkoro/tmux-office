@@ -19,6 +19,7 @@ import {
   focusFromHash,
   focusHash,
   FocusLink,
+  naturalCompare,
   NO_PANE_POD_ID,
   roomDesks,
   roomHeat,
@@ -472,6 +473,19 @@ describe('FocusLink', () => {
     assert.equal(link.resolve(office('work-1', 'work-3')), true);
     assert.deepEqual(link.focus, { kind: 'pod', id: 'work-3' });
     assert.equal(link.hash, 'work-3');
+  });
+});
+
+describe('naturalCompare', () => {
+  test('orders numbers by value and ties no two different names', () => {
+    assert.ok(naturalCompare('work-2', 'work-10') < 0);
+    for (const [a, b] of [
+      ['work-1', 'work-01'],
+      ['Work', 'work'],
+    ]) {
+      assert.notEqual(naturalCompare(a, b), 0, `${a} vs ${b}`);
+      assert.deepEqual([a, b].sort(naturalCompare), [b, a].sort(naturalCompare));
+    }
   });
 });
 

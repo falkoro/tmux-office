@@ -105,10 +105,12 @@ export const STATUS_TEXT: Record<DeskStatus, string> = {
 /** Desks that need the owner, most urgent first. */
 export const ATTENTION_STATUSES: readonly DeskStatus[] = ['needs-permission', 'waiting-input'];
 
-const natural = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
+// A fixed locale, so every viewer sees one order.
+const natural = new Intl.Collator('en', { numeric: true });
 
-/** Natural order: `emperor-2` before `emperor-10`. */
-export const naturalCompare = (a: string, b: string): number => natural.compare(a, b);
+/** Natural order: `work-2` before `work-10`. Names the collator ties fall back to code units. */
+export const naturalCompare = (a: string, b: string): number =>
+  natural.compare(a, b) || (a < b ? -1 : a > b ? 1 : 0);
 
 function activityText(
   ch: Character,
