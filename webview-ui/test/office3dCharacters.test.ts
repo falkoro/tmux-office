@@ -4,7 +4,7 @@ import { describe, test } from 'vitest';
 
 import type { ChoiceStore } from '../src/office3d/characterChoice.js';
 import { loadCharacter, saveCharacter } from '../src/office3d/characterChoice.js';
-import type { ActorKind, CharacterMood } from '../src/office3d/characters.js';
+import type { ActorKind, CharacterKind, CharacterMood } from '../src/office3d/characters.js';
 import {
   CHARACTER_KINDS,
   CharacterKit,
@@ -41,10 +41,16 @@ const blocked: ChoiceStore = {
 
 describe('default character', () => {
   test('the same name always gets the same kind', () => {
-    for (const name of ['emperor-8', 'triage-c9', 'nightly-digest', '']) {
-      assert.equal(defaultCharacterKind(name), defaultCharacterKind(`${name}`));
+    // Literal kinds: a change to the name hash would give every desk a new default character.
+    const kinds: Record<string, CharacterKind> = {
+      'work-8': 'knight',
+      'triage-c9': 'dog',
+      'nightly-digest': 'astronaut',
+      '': 'frog',
+    };
+    for (const [name, kind] of Object.entries(kinds)) {
+      assert.equal(defaultCharacterKind(name), kind, name);
     }
-    assert.equal(defaultCharacterKind('triage-c9'), defaultCharacterKind('triage-c9'));
   });
 
   test('kinds spread across names', () => {
