@@ -79,6 +79,7 @@ export default function Office3D(props: Office3DProps) {
     function poll(): void {
       if (document.hidden) return;
       const { officeState: os, agentTerminals, agentTools, officeRooms } = latest.current;
+      os.finishDespawns();
       const next = deriveOffice(os.characters.values(), agentTerminals, agentTools, officeRooms);
       const signature = JSON.stringify([next, os.selectedAgentId]);
       if (signature === last) return;

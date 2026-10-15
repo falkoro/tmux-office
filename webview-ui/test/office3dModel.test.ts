@@ -7,6 +7,7 @@ import {
   parseBackground,
   parseRoomConfig,
 } from '../../core/src/roomPatterns.js';
+import { OfficeState } from '../src/office/engine/officeState.js';
 import type { Character } from '../src/office/types.js';
 import type { TerminalMeta } from '../src/office3d/model.js';
 import type { OfficeConfig } from '../src/office3d/model.js';
@@ -395,6 +396,23 @@ describe('deriveOffice', () => {
     assert.deepEqual(
       desks.map((d) => d.contextRatio),
       [0.25, 1, 0],
+    );
+  });
+});
+
+describe('3D agent removal', () => {
+  test('a removed agent leaves the office and a returning id sits down again', () => {
+    const os = new OfficeState();
+    os.addAgent(1);
+    os.removeAgent(1);
+    os.finishDespawns();
+    assert.equal(os.characters.has(1), false);
+    os.addAgent(1);
+    os.finishDespawns();
+    const desks = deriveOffice(os.characters.values(), {}).flatMap(roomDesks);
+    assert.deepEqual(
+      desks.map((d) => d.agentId),
+      [1],
     );
   });
 });

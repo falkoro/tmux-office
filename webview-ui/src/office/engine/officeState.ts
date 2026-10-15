@@ -566,6 +566,13 @@ export class OfficeState {
     ch.bubbleType = null;
   }
 
+  /** The 3D view calls this each poll: it runs no game loop, so no despawn would ever finish. */
+  finishDespawns(): void {
+    for (const [id, ch] of this.characters) {
+      if (ch.matrixEffect === 'despawn') this.characters.delete(id);
+    }
+  }
+
   /** Find seat uid at a given tile position, or null */
   getSeatAtTile(col: number, row: number): string | null {
     for (const [uid, seat] of this.seats) {
