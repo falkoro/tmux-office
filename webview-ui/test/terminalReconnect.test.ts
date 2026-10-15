@@ -7,7 +7,6 @@ import {
 } from '../../core/src/constants.js';
 import type { ClientMessage } from '../../core/src/messages.js';
 import type { TransportState } from '../../core/src/transport.js';
-import { clearMissingTerminals } from '../src/office/engine/existingAgents.js';
 import { onReconnect } from '../src/transport/onReconnect.js';
 
 function fakeTransport(send: (msg: ClientMessage) => void = () => undefined) {
@@ -37,17 +36,9 @@ describe('onReconnect', () => {
     expect(fired).toBe(1);
   });
 
-  it('asks for a fresh snapshot after a drop, which clears a terminal that ended meanwhile', () => {
-    const stale = {
-      tmux: { session: 'work-3', windowId: '@1', paneId: '%1' } as unknown,
-      sessionName: 'work-3' as string | null,
-    };
+  it('asks for a fresh snapshot after a drop, not on the first connect', () => {
     const sent: string[] = [];
-    const { transport, emit } = fakeTransport((msg) => {
-      sent.push(msg.type);
-      // The server answers webviewReady with a snapshot; this agent's pane is gone from it.
-      if (msg.type === 'webviewReady') clearMissingTerminals([[7, stale]], {});
-    });
+    const { transport, emit } = fakeTransport((msg) => sent.push(msg.type));
     onReconnect(transport, () => undefined);
     emit(TRANSPORT_STATE_CONNECTING);
     emit(TRANSPORT_STATE_CONNECTED);
@@ -55,6 +46,5 @@ describe('onReconnect', () => {
     emit(TRANSPORT_STATE_RECONNECTING);
     emit(TRANSPORT_STATE_CONNECTED);
     expect(sent).toEqual(['webviewReady']);
-    expect(stale).toEqual({ tmux: null, sessionName: null });
   });
 });

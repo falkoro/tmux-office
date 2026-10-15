@@ -1517,6 +1517,11 @@ export class OfficeScene {
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (this.walking && this.down && this.renderer.domElement.hasPointerCapture(this.down.id))
       return;
+    if (!this.walking && this.down && this.down.id !== e.pointerId) {
+      this.down.dragged = true;
+      this.takeOver();
+      return;
+    }
     this.down = { id: e.pointerId, x: e.clientX, y: e.clientY, button: e.button, dragged: false };
     if (this.walking && e.button === 0) this.renderer.domElement.setPointerCapture(e.pointerId);
   };
