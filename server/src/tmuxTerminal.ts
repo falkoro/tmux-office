@@ -2,8 +2,6 @@ import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { promisify } from 'node:util';
 
-import type { IPty } from 'node-pty';
-
 import { TERM_SIZE_POLL_INTERVAL_MS } from './constants.js';
 import type { TmuxLocation } from './providers/hook/claude/claudeSessionRegistry.js';
 
@@ -193,8 +191,27 @@ export async function killThrowawaySession(sessionName: string): Promise<void> {
   }
 }
 
+/** The members of node-pty's IPty this module uses. */
+interface Pty {
+  onData(listener: (data: string) => void): unknown;
+  onExit(listener: () => void): unknown;
+  write(data: string | Buffer): void;
+  resize(cols: number, rows: number): void;
+  kill(): void;
+}
+
+interface NodePty {
+  spawn(
+    file: string,
+    args: string[],
+    options: { name: string; cols: number; rows: number; cwd: string },
+  ): Pty;
+}
+
+const NODE_PTY = 'node-pty';
+
 export interface AttachedTerminal {
-  pty: IPty;
+  pty: Pty;
   sessionName: string;
   stop(): void;
 }
@@ -214,7 +231,7 @@ export async function attachTmuxPane(
   };
   // Loaded here, not at the top: the VS Code extension bundles this module and
   // must load on hosts where node-pty's native build is missing.
-  const { spawn } = await import('node-pty');
+  const { spawn } = (await import(NODE_PTY)) as NodePty;
   const term = spawn('tmux', buildAttachArgv(location, sessionName), {
     name: 'xterm-256color',
     cols: size.cols,

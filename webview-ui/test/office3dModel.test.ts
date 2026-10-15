@@ -291,7 +291,7 @@ describe('deriveOffice', () => {
     );
   });
 
-  test('a session is led by its first agent whose name matches an overseer glob, else its lowest window', () => {
+  test('a session is led by its first agent whose name matches an overseer glob, else its oldest window', () => {
     const chars = [
       char(1, { tmux: pane('work-1', '@1') }),
       char(2, { tmux: pane('work-1', '@2') }),

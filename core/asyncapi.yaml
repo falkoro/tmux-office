@@ -201,7 +201,8 @@ components:
         overseers:
           description: |
             Globs over agent names. In each tmux session, the first agent whose name
-            matches oversees the others. With no match, the agent in the lowest window does.
+            matches oversees the others. With no match, the agent in the session's oldest
+            window does, in tmux window id order.
           type: array
           items:
             type: string
