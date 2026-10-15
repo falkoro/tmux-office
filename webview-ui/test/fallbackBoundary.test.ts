@@ -3,10 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { FallbackBoundary } from '../src/components/FallbackBoundary.js';
 
 describe('FallbackBoundary', () => {
-  it('renders the fallback once a child failed to load', () => {
-    const boundary = new FallbackBoundary({ fallback: 'pixel', children: '3d' });
+  it('reports a failed child so the app can leave the 3D view', () => {
+    let failures = 0;
+    const boundary = new FallbackBoundary({ onError: () => (failures += 1), children: '3d' });
     expect(boundary.render()).toBe('3d');
     boundary.state = { ...boundary.state, ...FallbackBoundary.getDerivedStateFromError() };
-    expect(boundary.render()).toBe('pixel');
+    boundary.componentDidCatch();
+    expect(failures).toBe(1);
+    expect(boundary.render()).toBeNull();
   });
 });

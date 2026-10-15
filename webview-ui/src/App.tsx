@@ -121,6 +121,7 @@ function App() {
   const [hooksTooltipDismissed, setHooksTooltipDismissed] = useState(false);
   const [isDebugMode, setIsDebugMode] = useState(false);
   const [reconnects, setReconnects] = useState(0);
+  const [office3DFailed, setOffice3DFailed] = useState(false);
   useEffect(() => onReconnect(transport, () => setReconnects((n) => n + 1)), []);
   const [alwaysShowOverlay, setAlwaysShowOverlay] = useState(false);
 
@@ -365,28 +366,7 @@ function App() {
   const openTerminal = openTerminalId !== null ? agentTerminals[openTerminalId] : undefined;
   const showTerminal = isBrowserRuntime && openTerminalId !== null && openTerminal?.tmux != null;
   // The layout editor and the first-run tour are drawn on the pixel office.
-  const show3D = prefer3D && !editor.isEditMode && !intro;
-
-  const pixelOffice = (
-    <OfficeCanvas
-      officeState={officeState}
-      onClick={handleClick}
-      isEditMode={editor.isEditMode}
-      editorState={editorState}
-      onEditorTileAction={editor.handleEditorTileAction}
-      onEditorEraseAction={editor.handleEditorEraseAction}
-      onEditorSelectionChange={editor.handleEditorSelectionChange}
-      onDeleteSelected={editor.handleDeleteSelected}
-      onRotateSelected={editor.handleRotateSelected}
-      onDragMove={editor.handleDragMove}
-      editorTick={editor.editorTick}
-      zoom={editor.zoom}
-      onZoomChange={editor.handleZoomChange}
-      panRef={editor.panRef}
-      showAreas={effectiveShowAreas}
-      activeAreaLabel={activeAreaLabel}
-    />
-  );
+  const show3D = prefer3D && !office3DFailed && !editor.isEditMode && !intro;
 
   return (
     <div
@@ -398,7 +378,7 @@ function App() {
         className={showTerminal ? 'office-stage' : 'w-full h-full relative overflow-hidden'}
       >
         {show3D ? (
-          <FallbackBoundary fallback={pixelOffice}>
+          <FallbackBoundary onError={() => setOffice3DFailed(true)}>
             <Suspense fallback={null}>
               <Office3D
                 officeState={officeState}
@@ -410,7 +390,24 @@ function App() {
             </Suspense>
           </FallbackBoundary>
         ) : (
-          pixelOffice
+          <OfficeCanvas
+            officeState={officeState}
+            onClick={handleClick}
+            isEditMode={editor.isEditMode}
+            editorState={editorState}
+            onEditorTileAction={editor.handleEditorTileAction}
+            onEditorEraseAction={editor.handleEditorEraseAction}
+            onEditorSelectionChange={editor.handleEditorSelectionChange}
+            onDeleteSelected={editor.handleDeleteSelected}
+            onRotateSelected={editor.handleRotateSelected}
+            onDragMove={editor.handleDragMove}
+            editorTick={editor.editorTick}
+            zoom={editor.zoom}
+            onZoomChange={editor.handleZoomChange}
+            panRef={editor.panRef}
+            showAreas={effectiveShowAreas}
+            activeAreaLabel={activeAreaLabel}
+          />
         )}
 
         {!isDebugMode ? (

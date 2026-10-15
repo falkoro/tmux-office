@@ -1,11 +1,11 @@
 import { Component, type ReactNode } from 'react';
 
 interface FallbackBoundaryProps {
-  fallback: ReactNode;
+  onError: () => void;
   children: ReactNode;
 }
 
-/** Renders `fallback` once a child throws, for example a lazy chunk that failed to load. */
+/** Renders nothing once a child throws, for example a lazy chunk that failed to load, and reports it. */
 export class FallbackBoundary extends Component<FallbackBoundaryProps, { failed: boolean }> {
   state = { failed: false };
 
@@ -13,7 +13,11 @@ export class FallbackBoundary extends Component<FallbackBoundaryProps, { failed:
     return { failed: true };
   }
 
+  componentDidCatch(): void {
+    this.props.onError();
+  }
+
   render(): ReactNode {
-    return this.state.failed ? this.props.fallback : this.props.children;
+    return this.state.failed ? null : this.props.children;
   }
 }
