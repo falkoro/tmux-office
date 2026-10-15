@@ -49,7 +49,12 @@ The 3D office answers two questions at a glance: what is each session doing, and
 
 ## Frame budget
 
-- Furniture is merged per material into three draw calls. Status effects are instanced meshes. The demo office draws in about 28 calls.
+- Furniture is merged per material into three draw calls. Status effects are instanced meshes. The demo office draws 29 calls and 157k triangles.
+- The room's ambient light is a light probe with nine SH coefficients, baked once from RoomEnvironment. A PMREM environment sampled per pixel cost over half the frame.
+- Furniture and the ground use Lambert shading. Their rough surfaces showed almost no specular. Characters keep the standard material, where Lambert saved nothing.
+- Plant blades and wires use the low-segment primitives. Character limbs keep the round ones, because fewer segments showed facets on feet and legs up close.
+- Measured in headless Chromium on SwiftShader at 1600x1000 and pixel ratio 1, the demo office runs at 2.7 fps, up from 1.1. A synchronous frame takes 375 ms of wall time and 1.9 s of GPU-process CPU, down from 760 ms and 4.7 s. The scene's own JS stays under 2 ms a frame.
+- Shadows cost about a quarter of the remaining frame. They stay, because the office looks flat without them.
 - The shadow map renders only when the furniture is rebuilt or the key light moves.
 - Frames run on requestAnimationFrame while something moves. When everything is still the loop stops and a timer wakes it for the next fidget.
 - Rendering pauses on `visibilitychange`.
