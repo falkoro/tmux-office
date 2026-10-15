@@ -112,6 +112,7 @@ export interface ClaudeSessionRegistryOptions {
  */
 export class ClaudeSessionRegistry {
   private readonly sessionsById = new Map<string, LiveClaudeSession>();
+  private byFile = new Map<string, LiveClaudeSession>();
 
   constructor(private readonly options: ClaudeSessionRegistryOptions = {}) {}
 
@@ -127,8 +128,11 @@ export class ClaudeSessionRegistry {
       let names: string[];
       try {
         names = fs.readdirSync(sessionsDir);
-      } catch {
-        continue;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        names = [...this.byFile.keys()]
+          .filter((file) => path.dirname(file) === sessionsDir)
+          .map((file) => path.basename(file));
       }
       for (const name of names) {
         if (!name.endsWith('.json')) continue;
@@ -137,15 +141,19 @@ export class ClaudeSessionRegistry {
     }
     files.sort((a, b) => a.file.localeCompare(b.file));
 
+    const byFile = new Map<string, LiveClaudeSession>();
     for (const { file, configDir } of files) {
-      let raw: string;
+      let parsed: LiveClaudeSession | null;
       try {
-        raw = fs.readFileSync(file, 'utf8');
-      } catch {
-        continue;
+        parsed = parseSessionFile(fs.readFileSync(file, 'utf8'), configDir);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') continue;
+        parsed = null;
       }
-      const parsed = parseSessionFile(raw, configDir);
-      if (!parsed || !alive(parsed.pid)) continue;
+      parsed ??= this.byFile.get(file) ?? null;
+      if (!parsed) continue;
+      byFile.set(file, parsed);
+      if (!alive(parsed.pid)) continue;
       const prev = found.get(parsed.sessionId);
       // Prefer a record that names a tmux pane. Otherwise the later path wins.
       if (!prev || Boolean(parsed.tmux) || !prev.tmux) {
@@ -153,6 +161,7 @@ export class ClaudeSessionRegistry {
       }
     }
 
+    this.byFile = byFile;
     this.sessionsById.clear();
     for (const [id, session] of found) this.sessionsById.set(id, session);
   }

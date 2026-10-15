@@ -62,7 +62,7 @@ Set these environment variables before you start the server.
 | `PIXEL_AGENTS_OFFICE_PINNED`     | Sessions to pin, as names or globs separated by commas or spaces. A pinned session sits alone in the front row of its room, on a red rug.                                                                                             |
 | `PIXEL_AGENTS_OFFICE_OVERSEERS`  | Globs over agent names, separated by commas or spaces. In each session the first agent whose name matches is the overseer, and its card drops the glob's literal start. Without a match, the agent in the session's oldest window is. |
 | `PIXEL_AGENTS_OFFICE_BACKGROUND` | `hide` drops the porch. The porch holds agents outside tmux and sessions that match no room.                                                                                                                                          |
-| `PIXEL_AGENTS_TMUX_SOCKET`       | The tmux socket to read, as in `tmux -L <name>`. Without it, the server reads the default tmux server.                                                                                                                                |
+| `PIXEL_AGENTS_TMUX_SOCKET`       | The tmux socket to read, as in `tmux -L <name>`. Without it, the server reads the default tmux server. It must name the socket Claude runs on, because pane ids are unique only within one tmux server.                               |
 
 For example, to put `work-*` and `side-*` sessions in two rooms and pin `work-1`:
 

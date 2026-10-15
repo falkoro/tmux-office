@@ -9,14 +9,12 @@ on:
     paths-ignore:
       - '**.md'
       - 'LICENSE'
-      - '.github/FUNDING.yml'
   push:
     branches:
       - main
     paths-ignore:
       - '**.md'
       - 'LICENSE'
-      - '.github/FUNDING.yml'
 
 permissions:
   contents: read

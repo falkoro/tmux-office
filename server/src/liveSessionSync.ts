@@ -43,7 +43,8 @@ export function agentTerminalMap(store: AgentStateStore): Record<string, AgentTe
 /**
  * Copy live tmux/name onto agents that share a session id. Broadcasts
  * `agentTerminal` only when the location or name changed. A session that
- * left the registry clears the location so the panel closes.
+ * left the registry clears the location so the panel closes. A teammate that
+ * shares its lead's session id is not that session's agent and is skipped.
  */
 export function syncLiveSessionMetadata(
   store: AgentStateStore,
@@ -51,6 +52,12 @@ export function syncLiveSessionMetadata(
 ): void {
   for (const [id, agent] of store) {
     if (!agent.sessionId) continue;
+    if (
+      agent.leadAgentId !== undefined &&
+      store.get(agent.leadAgentId)?.sessionId === agent.sessionId
+    ) {
+      continue;
+    }
     const live = registry.get(agent.sessionId);
     const nextTmux = live?.tmux ?? null;
     const nextName = live?.name ?? null;

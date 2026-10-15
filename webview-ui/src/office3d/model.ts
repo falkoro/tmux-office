@@ -87,9 +87,20 @@ export class FocusLink {
     this.hash = hash;
   }
 
-  /** Resolves the link against new rooms. True when the focus changed. */
+  /** Points the link at a new hash and resolves it. */
+  point(hash: string | null, rooms: readonly RoomModel[]): void {
+    this.hash = hash;
+    this.focus = null;
+    this.resolve(rooms);
+  }
+
+  /**
+   * Resolves the link against new rooms. True when the focus changed. While the
+   * hash names nothing here, the last focus stays, so a brief drop-out is no change.
+   */
   resolve(rooms: readonly RoomModel[]): boolean {
     const next = focusFromHash(rooms, this.hash);
+    if (next === null && this.hash !== null) return false;
     const changed = next?.kind !== this.focus?.kind || next?.id !== this.focus?.id;
     this.focus = next;
     return changed;
@@ -284,9 +295,14 @@ function deskLabels(rooms: RoomModel[], overseers: readonly string[]): void {
     }
   }
   const seen = new Map<string, number>();
-  for (const text of short.values()) seen.set(text, (seen.get(text) ?? 0) + 1);
+  const whole = new Map<string, number>();
   for (const [desk, text] of short) {
-    desk.label = seen.get(text) === 1 ? text : spaced(desk.name);
+    seen.set(text, (seen.get(text) ?? 0) + 1);
+    whole.set(spaced(desk.name), (whole.get(spaced(desk.name)) ?? 0) + 1);
+  }
+  for (const [desk, text] of short) {
+    if (seen.get(text) === 1) desk.label = text;
+    else desk.label = whole.get(spaced(desk.name)) === 1 ? spaced(desk.name) : desk.name;
   }
 }
 

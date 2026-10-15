@@ -11,6 +11,7 @@ set -euo pipefail
 cmd="${1:-}"
 name="${2:-demo}"
 port="${3:-3199}"
+[[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "name must match [A-Za-z0-9_-]+" >&2; exit 2; }
 sock="pa-demo-${name}"
 dir="${TMPDIR:-/tmp}/pa-demo-${name}"
 root="${PA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -99,11 +100,12 @@ start_rig() {
     else
       local run="exec tail -n 200 -f '$dir/panes/$i.log'"
       if tmux -L "$sock" has-session -t "=$session" 2>/dev/null; then
-        tmux -L "$sock" new-window -d -t "$session" -n "$window" -c "$cwd" "$run"
+        tmux -L "$sock" new-window -d -t "=$session:" -n "$window" -c "$cwd" "$run"
       else
         tmux -L "$sock" new-session -d -s "$session" -n "$window" -x "$cols" -y "$rows" -c "$cwd" "$run"
       fi
       read -r loc pid <<< "$(tmux -L "$sock" display-message -p -t "=$session:$window" '#{session_name}:#{window_id}.#{pane_id} #{pane_pid}')"
+      [[ -n "$pid" ]] || { echo "could not read the pane of $session:$window" >&2; stop_rig; exit 1; }
       local status=busy
       [[ "$state" == done ]] && status=idle
       echo "{\"pid\":$pid,\"sessionId\":\"$sid\",\"cwd\":\"$cwd\",\"tmux\":\"$loc\",\"status\":\"$status\",\"name\":\"$window\"}" > "$dir/home/$cfg/sessions/$pid.json"
@@ -124,7 +126,15 @@ start_rig() {
   seed_states
   animate > /dev/null 2>&1 &
   echo $! > "$dir/animate.pid"
-  grep -o "http://127.0.0.1:$port/?token=[^ ]*" "$dir/server.log" | head -1
+  local url
+  url="$(grep -o "http://127.0.0.1:$port/?token=[^ ]*" "$dir/server.log" | head -1 || true)"
+  if [[ -z "$url" ]]; then
+    echo "the server did not start:" >&2
+    tail -n 20 "$dir/server.log" >&2 || true
+    stop_rig
+    exit 1
+  fi
+  printf '%s\n' "$url"
 }
 
 # Adopted sessions start reading at end of file, so state lines must land after adoption.

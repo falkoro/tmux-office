@@ -422,6 +422,8 @@ export function useExtensionMessages(
         });
         const incomingTerminals = msg.agentTerminals as
           Record<string, { name?: string | null; tmux?: unknown }> | undefined;
+        terminalsRef.current = {};
+        setAgentTerminals(terminalsRef.current);
         if (incomingTerminals) {
           for (const [rawId, info] of Object.entries(incomingTerminals)) {
             const id = Number(rawId);

@@ -156,6 +156,24 @@ describe('ClaudeSessionRegistry', () => {
     expect(registry.get('same')?.configDir).toBe(path.join(root, '.claude-work'));
     expect(registry.get('same')?.tmux?.paneId).toBe('%4');
   });
+
+  it('keeps a session whose file reads short mid-rewrite, and drops it once the file is gone', () => {
+    const root = home();
+    const body = { pid: process.pid, sessionId: 'busy', cwd: '/work', name: 'alpha' };
+    writeSession(root, '.claude', '1.json', body);
+    const registry = new ClaudeSessionRegistry({ homeDir: root });
+    registry.refresh();
+    expect(registry.get('busy')?.name).toBe('alpha');
+
+    const file = path.join(root, '.claude', 'sessions', '1.json');
+    fs.writeFileSync(file, JSON.stringify(body).slice(0, 12));
+    registry.refresh();
+    expect(registry.get('busy')?.name).toBe('alpha');
+
+    fs.rmSync(file);
+    registry.refresh();
+    expect(registry.get('busy')).toBeUndefined();
+  });
 });
 
 describe('live session adoption', () => {

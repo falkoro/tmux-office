@@ -875,8 +875,7 @@ export class OfficeScene {
 
   private show(hash: string | null): void {
     if (this.disposed) return;
-    this.link.hash = hash;
-    this.link.resolve(this.snapshot.rooms);
+    this.link.point(hash, this.snapshot.rooms);
     this.userMoved = false;
     const url = new URL(window.location.href);
     url.hash = hash === null ? '' : encodeURIComponent(hash).replace(/%3A/g, ':');

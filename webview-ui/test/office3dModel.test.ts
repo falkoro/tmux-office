@@ -337,6 +337,8 @@ describe('deriveOffice', () => {
       'web-2024',
       'build-ok',
       'build_ok-2e',
+      'stage-ok',
+      'stage_ok',
     ];
     const chars = names.map((_, i) => char(i + 1, { tmux: pane(`work-${i}`, `@${i}`) }));
     chars[1].tmux = pane('work-0', '@9');
@@ -360,6 +362,8 @@ describe('deriveOffice', () => {
         ['web-2024', 'web 2024'],
         ['build-ok', 'build ok'],
         ['build_ok-2e', 'build ok 2e'],
+        ['stage-ok', 'stage-ok'],
+        ['stage_ok', 'stage_ok'],
       ]),
     );
     const leads = ['leader-c9', 'lead-ops-4a'];
@@ -553,11 +557,22 @@ describe('FocusLink', () => {
     const link = new FocusLink('work-3');
     assert.equal(link.resolve(office('work-1', 'work-3')), true);
     assert.deepEqual(link.focus, { kind: 'pod', id: 'work-3' });
-    assert.equal(link.resolve(office('work-1')), true);
-    assert.equal(link.focus, null);
-    assert.equal(link.resolve(office('work-1', 'work-3')), true);
+    assert.equal(link.resolve(office('work-1')), false);
+    assert.deepEqual(link.focus, { kind: 'pod', id: 'work-3' });
+    assert.equal(link.resolve(office('work-1', 'work-3')), false);
     assert.deepEqual(link.focus, { kind: 'pod', id: 'work-3' });
     assert.equal(link.hash, 'work-3');
+  });
+
+  test('pointing the link somewhere missing drops the old focus', () => {
+    const link = new FocusLink('work-3');
+    link.resolve(office('work-1', 'work-3'));
+    link.point('work-9', office('work-1', 'work-3'));
+    assert.equal(link.focus, null);
+    link.point('work-1', office('work-1', 'work-3'));
+    assert.deepEqual(link.focus, { kind: 'pod', id: 'work-1' });
+    link.point(null, office('work-1'));
+    assert.equal(link.focus, null);
   });
 });
 
