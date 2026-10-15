@@ -2,10 +2,13 @@ import type { Texture } from 'three';
 import {
   Box3,
   Color,
+  CubeCamera,
   DirectionalLight,
   Fog,
   Group,
+  HalfFloatType,
   HemisphereLight,
+  LightProbe,
   MathUtils,
   Matrix4,
   Mesh,
@@ -15,7 +18,6 @@ import {
   PCFShadowMap,
   PerspectiveCamera,
   PlaneGeometry,
-  PMREMGenerator,
   Raycaster,
   Scene,
   Spherical,
@@ -23,10 +25,12 @@ import {
   TOUCH,
   Vector2,
   Vector3,
+  WebGLCubeRenderTarget,
   WebGLRenderer,
 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { LightProbeGenerator } from 'three/addons/lights/LightProbeGenerator.js';
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 
 import {
@@ -674,7 +678,7 @@ export class OfficeScene {
   private readonly key = new DirectionalLight(C.keyLight, 2.2);
   private readonly fog = new Fog(C.background, 60, 200);
   private readonly ground: Mesh<PlaneGeometry, MeshStandardMaterial>;
-  private readonly environment: Texture;
+  private readonly probe = new LightProbe(undefined, 0.4);
   private readonly rooms = new Map<string, RoomView>();
   private readonly desks = new Map<number, DeskView>();
   private deskList: DeskView[] = [];
@@ -737,13 +741,17 @@ export class OfficeScene {
       ? el('div', 'o3d-stats', host)
       : null;
 
-    const pmrem = new PMREMGenerator(renderer);
+    // The room's light as nine SH coefficients: a PMREM environment sampled per pixel cost over half the frame.
     const room = new RoomEnvironment();
-    this.environment = pmrem.fromScene(room, 0.04).texture;
+    const cube = new WebGLCubeRenderTarget(64, { type: HalfFloatType });
+    new CubeCamera(0.1, 100, cube).update(renderer, room);
     room.dispose();
-    pmrem.dispose();
-    this.scene.environment = this.environment;
-    this.scene.environmentIntensity = 0.35;
+    void LightProbeGenerator.fromCubeRenderTarget(renderer, cube)
+      .then((baked) => {
+        this.probe.sh.copy(baked.sh);
+        this.requestRender();
+      })
+      .finally(() => cube.dispose());
     this.scene.background = new Color(C.background);
     this.scene.fog = this.fog;
 
@@ -752,7 +760,12 @@ export class OfficeScene {
     this.key.shadow.radius = 4;
     this.key.shadow.bias = -0.0004;
     this.key.shadow.normalBias = 0.025;
-    this.scene.add(this.key, this.key.target, new HemisphereLight(C.hemiSky, C.hemiGround, 1.1));
+    this.scene.add(
+      this.key,
+      this.key.target,
+      this.probe,
+      new HemisphereLight(C.hemiSky, C.hemiGround, 1.1),
+    );
 
     this.ground = new Mesh(
       new PlaneGeometry(400, 400).rotateX(-Math.PI / 2),
@@ -885,7 +898,6 @@ export class OfficeScene {
     this.light.dispose();
     this.ground.geometry.dispose();
     this.ground.material.dispose();
-    this.environment.dispose();
     this.renderer.dispose();
     this.renderer.forceContextLoss();
     this.renderer.domElement.remove();
