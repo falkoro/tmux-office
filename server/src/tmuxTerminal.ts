@@ -13,6 +13,7 @@ const SOCKET_NAME = /^[A-Za-z0-9_-]+$/;
 const MAX_DIMENSION = 500;
 const FALLBACK_COLS = 80;
 const FALLBACK_ROWS = 24;
+const THROWAWAY_PREFIX = 'pa-web-';
 
 export function tmuxSocketName(): string | undefined {
   const name = process.env.PIXEL_AGENTS_TMUX_SOCKET;
@@ -44,7 +45,7 @@ export function buildAttachArgv(location: TmuxLocation, sessionName: string): st
     ...tmuxSocketArgs(),
     'new-session',
     '-t',
-    location.session,
+    `=${location.session}`,
     '-s',
     sessionName,
     '-f',
@@ -59,6 +60,10 @@ export function buildAttachArgv(location: TmuxLocation, sessionName: string): st
     'select-window',
     '-t',
     location.windowId,
+    ';',
+    'select-pane',
+    '-t',
+    location.paneId,
   ];
 }
 
@@ -159,7 +164,7 @@ export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
     const paneId = parts[0] ?? '';
     const windowId = parts[parts.length - 1] ?? '';
     const session = parts.slice(1, -1).join(' ');
-    if (!paneId || !session || !windowId) {
+    if (!paneId || !session || !windowId || session.startsWith(THROWAWAY_PREFIX)) {
       continue;
     }
     panes.push({ paneId, session, windowId });
@@ -181,7 +186,7 @@ export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
 }
 
 export async function killThrowawaySession(sessionName: string): Promise<void> {
-  if (!sessionName.startsWith('pa-web-')) return;
+  if (!sessionName.startsWith(THROWAWAY_PREFIX)) return;
   try {
     await execFileAsync('tmux', [...tmuxSocketArgs(), 'kill-session', '-t', sessionName], {
       timeout: 2000,
@@ -224,7 +229,7 @@ export async function attachTmuxPane(
   if (!isSafeTmuxLocation(location)) {
     throw new Error('unsafe tmux location');
   }
-  const sessionName = `pa-web-${randomBytes(8).toString('hex')}`;
+  const sessionName = `${THROWAWAY_PREFIX}${randomBytes(8).toString('hex')}`;
   const size = (await readPaneClientSize(location.paneId)) ?? {
     cols: FALLBACK_COLS,
     rows: FALLBACK_ROWS,

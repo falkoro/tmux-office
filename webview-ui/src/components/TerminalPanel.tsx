@@ -75,6 +75,8 @@ export function TerminalPanel({ agentId, name, tmux, onClose }: TerminalPanelPro
   useEffect(() => {
     const host = hostRef.current;
     if (!host) return;
+    setDisconnected(false);
+    setError(null);
     const term = new Terminal({
       fontFamily: terminalFontFamily,
       fontSize: TERMINAL_FONT_MIN_PX,
@@ -137,10 +139,12 @@ export function TerminalPanel({ agentId, name, tmux, onClose }: TerminalPanelPro
     return () => {
       observer.disconnect();
       input.dispose();
+      socket.onclose = null;
+      socket.onerror = null;
       socket.close();
       term.dispose();
     };
-  }, [agentId]);
+  }, [agentId, tmux.session, tmux.windowId, tmux.paneId]);
 
   const target = `${tmux.session}:${tmux.windowId}.${tmux.paneId}`;
   return (

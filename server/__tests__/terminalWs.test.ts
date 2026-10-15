@@ -65,6 +65,9 @@ describe('terminal argv', () => {
       expect(argv).toContain('destroy-unattached');
       expect(argv).not.toContain('window-size');
       expect(argv).toContain('@1');
+      expect(argv).toContain('%1');
+      expect(argv[argv.indexOf('new-session') + 1]).toBe('-t');
+      expect(argv[argv.indexOf('new-session') + 2]).toBe('=demo');
       expect(argv).not.toContain('send-keys');
     } finally {
       if (previous === undefined) delete process.env.PIXEL_AGENTS_TMUX_SOCKET;
@@ -208,6 +211,8 @@ describe('/ws/term attach', () => {
     targetWindowId = windowId;
     width = Number(widthRaw);
     height = Number(heightRaw);
+    // A second pane in the window takes focus, so the attach must select the followed one.
+    await tmux(socketName, ['split-window', '-t', pane]);
     // `demo`, which a stale registry entry would still name, goes away; only the
     // location the server followed (agent.tmux) still reaches the pane.
     await tmux(socketName, ['new-session', '-d', '-s', 'other', '-x', '100', '-y', '30']);
