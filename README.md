@@ -27,6 +27,8 @@ tmux office is built on [Pixel Agents](https://github.com/pixel-agents-hq/pixel-
 
 You need Node 20 or later, tmux, and Claude Code running inside tmux.
 
+The terminal panel needs node-pty, which npm may have to build with a C/C++ toolchain. The office works without it.
+
 ```bash
 git clone https://github.com/falkoro/tmux-office.git
 cd tmux-office
@@ -54,13 +56,13 @@ The rig prints the office URL. It runs fake agents on a private tmux server (`tm
 
 Set these environment variables before you start the server.
 
-| Variable                         | Effect                                                                                                                                                                                                                      |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PIXEL_AGENTS_OFFICE_ROOMS`      | Groups tmux sessions into rooms. Separate entries with `;`. `name=glob` puts every matching session in a room called `name`, and `*` matches any text. Without it, every session is a room.                                 |
-| `PIXEL_AGENTS_OFFICE_PINNED`     | Sessions to pin, as names or globs separated by commas or spaces. A pinned session sits alone in the front row of its room, on a red rug.                                                                                   |
-| `PIXEL_AGENTS_OFFICE_OVERSEERS`  | Globs over agent names, separated by commas or spaces. In each session the first agent whose name matches is the overseer, and its card drops the glob's literal start. Without a match, the agent in the lowest window is. |
-| `PIXEL_AGENTS_OFFICE_BACKGROUND` | `hide` drops the porch. The porch holds agents outside tmux and sessions that match no room.                                                                                                                                |
-| `PIXEL_AGENTS_TMUX_SOCKET`       | The tmux socket to read, as in `tmux -L <name>`. Without it, the server reads the default tmux server.                                                                                                                      |
+| Variable                         | Effect                                                                                                                                                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PIXEL_AGENTS_OFFICE_ROOMS`      | Groups tmux sessions into rooms. Separate entries with `;`. `name=glob` puts every matching session in a room called `name`, and `*` matches any text. Without it, every session is a room.                                           |
+| `PIXEL_AGENTS_OFFICE_PINNED`     | Sessions to pin, as names or globs separated by commas or spaces. A pinned session sits alone in the front row of its room, on a red rug.                                                                                             |
+| `PIXEL_AGENTS_OFFICE_OVERSEERS`  | Globs over agent names, separated by commas or spaces. In each session the first agent whose name matches is the overseer, and its card drops the glob's literal start. Without a match, the agent in the session's oldest window is. |
+| `PIXEL_AGENTS_OFFICE_BACKGROUND` | `hide` drops the porch. The porch holds agents outside tmux and sessions that match no room.                                                                                                                                          |
+| `PIXEL_AGENTS_TMUX_SOCKET`       | The tmux socket to read, as in `tmux -L <name>`. Without it, the server reads the default tmux server.                                                                                                                                |
 
 For example, to put `work-*` and `side-*` sessions in two rooms and pin `work-1`:
 

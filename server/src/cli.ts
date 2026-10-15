@@ -285,7 +285,7 @@ async function main(): Promise<void> {
           rooms.map((room) => `${room.name} (${room.patterns.join(', ')})`).join('; ') ||
           'one per session'
         }; pinned: ${pinned.join(', ') || 'none'}; overseers: ${
-          overseers.join(', ') || 'lowest window'
+          overseers.join(', ') || 'oldest window'
         }; background: ${background ? 'shown' : 'hidden'}`,
       );
     }

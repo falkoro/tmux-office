@@ -290,7 +290,8 @@ export class Effects {
     }
     this.rings.flush();
     this.beams.flush();
-    return pulse || this.stepConfetti(t);
+    const moving = this.stepConfetti(t);
+    return pulse || moving;
   }
 
   private stepConfetti(t: number): boolean {

@@ -751,6 +751,7 @@ export class OfficeScene {
         this.probe.sh.copy(baked.sh);
         this.requestRender();
       })
+      .catch(() => {})
       .finally(() => cube.dispose());
     this.scene.background = new Color(C.background);
     this.scene.fog = this.fog;

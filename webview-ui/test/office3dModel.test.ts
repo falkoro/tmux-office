@@ -325,7 +325,19 @@ describe('deriveOffice', () => {
   });
 
   test('a card label drops the hex id and the overseer role, unless two labels would match', () => {
-    const names = ['lead-api-e9', 'fix-login-1d', 'docs-62', 'docs-b4', 'lead-3f', 'run-v2'];
+    const names = [
+      'lead-api-e9',
+      'fix-login-1d',
+      'docs-62',
+      'docs-b4',
+      'lead-3f',
+      'run-v2',
+      'fix-bad',
+      'add-cafe',
+      'web-2024',
+      'build-ok',
+      'build_ok-2e',
+    ];
     const chars = names.map((_, i) => char(i + 1, { tmux: pane(`work-${i}`, `@${i}`) }));
     chars[1].tmux = pane('work-0', '@9');
     const terminals: Record<number, TerminalMeta> = Object.fromEntries(
@@ -343,7 +355,23 @@ describe('deriveOffice', () => {
         ['docs-b4', 'docs b4'],
         ['lead-3f', 'lead'],
         ['run-v2', 'run v2'],
+        ['fix-bad', 'fix bad'],
+        ['add-cafe', 'add cafe'],
+        ['web-2024', 'web 2024'],
+        ['build-ok', 'build ok'],
+        ['build_ok-2e', 'build ok 2e'],
       ]),
+    );
+    const leads = ['leader-c9', 'lead-ops-4a'];
+    const leadChars = leads.map((_, i) => char(i + 1, { tmux: pane(`team-${i}`, `@${i}`) }));
+    const leadTerminals: Record<number, TerminalMeta> = Object.fromEntries(
+      leads.map((name, i) => [i + 1, { name, tmux: leadChars[i].tmux ?? null }]),
+    );
+    assert.deepEqual(
+      deriveOffice(leadChars, leadTerminals, {}, cfg([], [], true, ['lead*']))
+        .flatMap((room) => room.pods.flatMap((pod) => pod.desks))
+        .map((d) => d.label),
+      ['leader', 'ops'],
     );
   });
 
