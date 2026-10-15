@@ -136,6 +136,31 @@ describe('createAccessVerifier', () => {
     expect(fetches).toBe(1);
   });
 
+  it('keeps the last keys when a refresh returns no usable keys', async () => {
+    const { privateKey, jwks } = keyPair();
+    const docs: JwksDocument[] = [jwks, { keys: [] }];
+    let fetches = 0;
+    const verifier = createAccessVerifier({ teamDomain: TEAM, aud: AUD }, async () => {
+      const doc = docs[Math.min(fetches, docs.length - 1)];
+      fetches += 1;
+      if (!doc) throw new Error('no doc');
+      return doc;
+    });
+    const now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      const exp = Math.floor((now + ACCESS_JWKS_CACHE_MS) / 1000) + 3600;
+      const token = sign(privateKey, payload({ exp }));
+      await expect(verifier.verify(token)).resolves.toEqual({ ok: true, email: 'a@b' });
+      clock.mockReturnValue(now + ACCESS_JWKS_CACHE_MS + 1);
+      await expect(verifier.verify(token)).resolves.toEqual({ ok: true, email: 'a@b' });
+      await expect(verifier.verify(token)).resolves.toEqual({ ok: true, email: 'a@b' });
+      expect(fetches).toBe(2);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('caps unknown-kid refetches so made-up kids do not fan out to Cloudflare', async () => {
     const { privateKey, jwks } = keyPair();
     let fetches = 0;

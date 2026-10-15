@@ -158,7 +158,12 @@ export function createAccessVerifier(
     }
     inflight = fetchJwks(url)
       .then((doc) => {
-        keys = keysFromJwks(doc);
+        const next = keysFromJwks(doc);
+        if (next.size === 0) {
+          failedAt = Date.now();
+          return;
+        }
+        keys = next;
         fetchedAt = Date.now();
       })
       .catch(() => {

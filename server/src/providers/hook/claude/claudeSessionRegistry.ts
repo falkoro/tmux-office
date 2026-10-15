@@ -30,6 +30,10 @@ export interface LiveClaudeSession {
   /** `"busy"` or `"idle"` as the session file reported it. */
   status: string | null;
   name: string | null;
+  /** Start time of the process, field 22 of `/proc/<pid>/stat`. */
+  procStart?: string;
+  /** `linux:<machine-id>:pid:[<inode>]`, the pid namespace the pid belongs to. */
+  pidDomain?: string;
 }
 
 const TMUX_LOCATION = /^(.+):(@\d+)\.(%\d+)$/;
@@ -82,6 +86,8 @@ export function parseSessionFile(raw: string, configDir: string): LiveClaudeSess
     tmux,
     status: optionalString(record.status),
     name: optionalString(record.name),
+    procStart: optionalString(record.procStart) ?? undefined,
+    pidDomain: optionalString(record.pidDomain) ?? undefined,
   };
 }
 
@@ -95,10 +101,63 @@ export function isPidAlive(pid: number): boolean {
   }
 }
 
+/** The /proc reads that tell a live Claude from a reused pid. Null when unreadable. */
+export interface ProcReader {
+  stat(pid: number): string | null;
+  pidNamespace(): string | null;
+}
+
+export const realProc: ProcReader = {
+  stat(pid) {
+    try {
+      return fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    } catch {
+      return null;
+    }
+  },
+  pidNamespace() {
+    try {
+      return fs.readlinkSync('/proc/self/ns/pid');
+    } catch {
+      return null;
+    }
+  },
+};
+
+/** Field 22 (starttime) of a `/proc/<pid>/stat` line. The comm field may hold spaces or parens. */
+export function procStartTime(stat: string): string | null {
+  const end = stat.lastIndexOf(')');
+  if (end < 0) return null;
+  return stat.slice(end + 2).split(' ')[19] ?? null;
+}
+
+/**
+ * The pid is alive and, where the session file and /proc can tell, it is the
+ * same process in the same pid namespace that wrote the file.
+ */
+export function isSessionProcess(
+  session: LiveClaudeSession,
+  alive: (pid: number) => boolean,
+  proc: ProcReader,
+): boolean {
+  if (!alive(session.pid)) return false;
+  if (session.pidDomain) {
+    const ns = proc.pidNamespace();
+    if (ns && !session.pidDomain.endsWith(`:${ns}`)) return false;
+  }
+  if (session.procStart) {
+    const stat = proc.stat(session.pid);
+    const start = stat ? procStartTime(stat) : null;
+    if (start && start !== session.procStart) return false;
+  }
+  return true;
+}
+
 export interface ClaudeSessionRegistryOptions {
   homeDir?: string;
   configDirGlob?: string;
   isPidAlive?: (pid: number) => boolean;
+  proc?: ProcReader;
 }
 
 /**
@@ -116,6 +175,7 @@ export class ClaudeSessionRegistry {
     const homeDir = this.options.homeDir ?? os.homedir();
     const glob = this.options.configDirGlob ?? DEFAULT_CLAUDE_CONFIG_DIR_GLOB;
     const alive = this.options.isPidAlive ?? isPidAlive;
+    const proc = this.options.proc ?? realProc;
     const found = new Map<string, LiveClaudeSession>();
 
     const files: { file: string; configDir: string }[] = [];
@@ -150,7 +210,7 @@ export class ClaudeSessionRegistry {
       parsed ??= this.byFile.get(file) ?? null;
       if (!parsed) continue;
       byFile.set(file, parsed);
-      if (!alive(parsed.pid)) continue;
+      if (!isSessionProcess(parsed, alive, proc)) continue;
       const prev = found.get(parsed.sessionId);
       // Prefer a record that names a tmux pane. Otherwise the later path wins.
       if (!prev || Boolean(parsed.tmux) || !prev.tmux) {

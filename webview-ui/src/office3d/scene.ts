@@ -546,7 +546,7 @@ interface PodSign {
 }
 
 /** A room's labels: its title and counts, its pod signs, and the name list for far zooms. */
-class RoomView {
+export class RoomView {
   readonly group = new Group();
   private readonly ctx: Ctx;
   private readonly label: CSS2DObject;
@@ -558,6 +558,7 @@ class RoomView {
   private readonly rosterEl: HTMLDivElement;
   private rosterKey = '';
   private readonly signs = new Map<string, PodSign>();
+  private alone = false;
 
   constructor(ctx: Ctx, id: string, background: boolean) {
     this.ctx = ctx;
@@ -601,7 +602,9 @@ class RoomView {
   /** Hide the title and plaques that `screened` says are out of sight. */
   screen(screened: Screen | null): void {
     this.label.visible = !screened?.(this.label.position, null);
-    for (const sign of this.signs.values()) sign.obj.visible = !screened?.(sign.obj.position, null);
+    for (const sign of this.signs.values()) {
+      sign.obj.visible = !this.alone && !screened?.(sign.obj.position, null);
+    }
   }
 
   apply(room: RoomModel): void {
@@ -640,7 +643,7 @@ class RoomView {
       this.signs.delete(id);
     }
     // A room that is just one session needs no sign repeating its name.
-    const alone = room.pods.length === 1 && room.pods[0].id === room.id;
+    this.alone = room.pods.length === 1 && room.pods[0].id === room.id;
     for (const pod of room.pods) {
       let sign = this.signs.get(pod.id);
       if (!sign) {
@@ -658,7 +661,7 @@ class RoomView {
         this.signs.set(pod.id, sign);
         this.group.add(sign.obj);
       }
-      sign.obj.visible = !alone;
+      sign.obj.visible = !this.alone;
       setText(sign.name, pod.title);
       sign.el.title = `Focus ${pod.title}`;
       sign.el.dataset.pinned = String(pod.pinned);
@@ -763,7 +766,8 @@ export class OfficeScene {
   private statFrames = 0;
   private width = 0;
   private height = 0;
-  private down: { x: number; y: number; button: number; dragged: boolean } | null = null;
+  private down: { id: number; x: number; y: number; button: number; dragged: boolean } | null =
+    null;
   private walking = false;
   /** Skip OrbitControls until a walk exit glide finishes. Its polar clamp cannot look level. */
   private holdOrbit = false;
@@ -868,7 +872,9 @@ export class OfficeScene {
     this.listen(window, 'keydown', this.onKeyDown);
     this.listen(window, 'keyup', this.onKeyUp);
     this.listen(window, 'blur', this.clearKeys);
-    this.listen(renderer.domElement, 'pointercancel', () => (this.down = null));
+    this.listen(renderer.domElement, 'pointercancel', (e: PointerEvent) => {
+      if (this.down?.id === e.pointerId) this.down = null;
+    });
     this.listen(document, 'visibilitychange', this.onVisibility);
     this.listen(window, 'hashchange', this.onHashChange);
     this.listen(this.labels.domElement, 'wheel', this.forwardWheel, { passive: false });
@@ -1509,7 +1515,9 @@ export class OfficeScene {
 
   // A click must not count as steering, or the first pick would freeze the fit.
   private readonly onPointerDown = (e: PointerEvent): void => {
-    this.down = { x: e.clientX, y: e.clientY, button: e.button, dragged: false };
+    if (this.walking && this.down && this.renderer.domElement.hasPointerCapture(this.down.id))
+      return;
+    this.down = { id: e.pointerId, x: e.clientX, y: e.clientY, button: e.button, dragged: false };
     if (this.walking && e.button === 0) this.renderer.domElement.setPointerCapture(e.pointerId);
   };
 
@@ -1518,6 +1526,7 @@ export class OfficeScene {
       this.renderer.domElement.releasePointerCapture(e.pointerId);
     }
     const down = this.down;
+    if (down && down.id !== e.pointerId) return;
     this.down = null;
     if (!down || down.dragged || down.button !== 0) return;
     const id = this.pick(e);
@@ -1527,6 +1536,7 @@ export class OfficeScene {
   private readonly onPointerMove = (e: PointerEvent): void => {
     const down = this.down;
     if (down) {
+      if (down.id !== e.pointerId) return;
       if (this.walking && down.button === 0) {
         const dx = e.clientX - down.x;
         const dy = e.clientY - down.y;

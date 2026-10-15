@@ -9,6 +9,7 @@ import { AgentStateStore } from '../src/agentStateStore.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
 import {
   ClaudeSessionRegistry,
+  type ProcReader,
   parseSessionFile,
   parseTmuxLocation,
   transcriptPathForSession,
@@ -104,6 +105,40 @@ describe('ClaudeSessionRegistry', () => {
     fs.mkdirSync(sessions, { recursive: true });
     fs.writeFileSync(path.join(sessions, fileName), JSON.stringify(body));
   }
+
+  it('drops a session whose pid now belongs to another process or pid namespace', () => {
+    const root = home();
+    const ns = 'pid:[4026531836]';
+    const stat = (start: string) =>
+      `${process.pid} (we) ird) S ${Array.from({ length: 18 }, (_, i) => i + 4).join(' ')} ${start} 0 0`;
+    const write = (file: string, sessionId: string, procStart: string, pidDomain: string) =>
+      writeSession(root, '.claude', file, {
+        pid: process.pid,
+        sessionId,
+        cwd: '/w',
+        procStart,
+        pidDomain,
+      });
+    write('1.json', 'same', '777', `linux:test-machine:${ns}`);
+    write('2.json', 'restarted', '555', `linux:test-machine:${ns}`);
+    write('3.json', 'container', '777', 'linux:test-machine:pid:[4026532999]');
+    const proc: ProcReader = { stat: () => stat('777'), pidNamespace: () => ns };
+    const registry = new ClaudeSessionRegistry({ homeDir: root, proc });
+    registry.refresh();
+    expect(registry.sessions().map((s) => s.sessionId)).toEqual(['same']);
+
+    const blind = new ClaudeSessionRegistry({
+      homeDir: root,
+      proc: { stat: () => null, pidNamespace: () => null },
+    });
+    blind.refresh();
+    expect(
+      blind
+        .sessions()
+        .map((s) => s.sessionId)
+        .sort(),
+    ).toEqual(['container', 'restarted', 'same']);
+  });
 
   it.skipIf(process.getuid?.() === 0)('keeps sessions when the home listing fails once', () => {
     const root = home();
