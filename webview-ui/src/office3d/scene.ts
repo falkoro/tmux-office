@@ -86,8 +86,8 @@ import type { DeskLight } from './effects.js';
 import { Effects } from './effects.js';
 import type { OfficeFurniture } from './furniture.js';
 import { buildOffice, radialTexture } from './furniture.js';
-import type { DeskSpot, OfficePlan, PodSpot, RoomSpot } from './layout.js';
-import { planOffice } from './layout.js';
+import type { Bounds, DeskSpot, OfficePlan, PodSpot, RoomSpot } from './layout.js';
+import { fitKey, focusArea, planOffice } from './layout.js';
 import type { DeskModel, DeskStatus, Focus, HelperModel, PodModel, RoomModel } from './model.js';
 import {
   BACKGROUND_ROOM_ID,
@@ -645,13 +645,6 @@ interface Tween {
   toOrbit: Spherical;
 }
 
-interface Bounds {
-  minX: number;
-  maxX: number;
-  minZ: number;
-  maxZ: number;
-}
-
 /**
  * The 3D office: owns the renderer, camera, controls, labels and every mesh.
  * It draws on demand: every animation frame while something moves, nothing
@@ -687,6 +680,7 @@ export class OfficeScene {
   private snapshot: OfficeSnapshot = { rooms: [], selectedId: null };
   private plan: OfficePlan = planOffice([], 1);
   private planKey = '';
+  private fitKey = '';
   private focused: Focus | null = null;
   private pendingHash: string | null;
   private userMoved = false;
@@ -1046,57 +1040,38 @@ export class OfficeScene {
       this.plan.depth,
       this.plan.rooms.map((r) => r.id),
     ]);
-    if (planKey === this.planKey) return;
-    this.planKey = planKey;
+    if (planKey !== this.planKey) {
+      this.planKey = planKey;
+      const reach = Math.hypot(this.plan.width, this.plan.depth) / 2 + 2;
+      this.key.position.set(-0.45 * reach, 1.3 * reach, 0.75 * reach);
+      const cam = this.key.shadow.camera;
+      cam.left = -reach;
+      cam.right = reach;
+      cam.top = reach;
+      cam.bottom = -reach;
+      cam.near = 0.5;
+      cam.far = reach * 4;
+      cam.updateProjectionMatrix();
+      this.renderer.shadowMap.needsUpdate = true;
+      this.controls.maxTargetRadius = reach;
+      this.controls.maxDistance = Math.max(
+        30,
+        this.fitView(focusArea(this.plan, null)).orbit.radius * 2.2,
+      );
+    }
 
-    const reach = Math.hypot(this.plan.width, this.plan.depth) / 2 + 2;
-    this.key.position.set(-0.45 * reach, 1.3 * reach, 0.75 * reach);
-    const cam = this.key.shadow.camera;
-    cam.left = -reach;
-    cam.right = reach;
-    cam.top = reach;
-    cam.bottom = -reach;
-    cam.near = 0.5;
-    cam.far = reach * 4;
-    cam.updateProjectionMatrix();
-    this.renderer.shadowMap.needsUpdate = true;
-    this.controls.maxTargetRadius = reach;
-    this.controls.maxDistance = Math.max(
-      30,
-      this.fitView(this.overviewBounds()).orbit.radius * 2.2,
-    );
-
-    if (!this.userMoved) this.applyFocus(animate);
+    if (!this.userMoved && fitKey(this.plan, this.focused) !== this.fitKey) {
+      this.applyFocus(animate);
+    }
   }
 
   private focusable(target: Focus): boolean {
     return target.kind === 'room' ? this.rooms.has(target.id) : this.podIndex.has(target.id);
   }
 
-  private overviewBounds(): Bounds {
-    const { width, depth } = this.plan;
-    return { minX: -width / 2, maxX: width / 2, minZ: -depth / 2, maxZ: depth / 2 };
-  }
-
-  private focusBounds(): Bounds {
-    const target = this.focused;
-    const rect =
-      target?.kind === 'room'
-        ? this.plan.rooms.find((r) => r.id === target.id)
-        : target && this.podIndex.get(target.id);
-    if (!rect) return this.overviewBounds();
-    // A pod is framed with a little of the floor around it.
-    const pad = 'pinned' in rect ? 0.5 : 0;
-    return {
-      minX: rect.x - rect.width / 2 - pad,
-      maxX: rect.x + rect.width / 2 + pad,
-      minZ: rect.z - rect.depth / 2 - pad,
-      maxZ: rect.z + rect.depth / 2 + pad,
-    };
-  }
-
   private applyFocus(animate: boolean): void {
-    const to = this.fitView(this.focusBounds());
+    this.fitKey = fitKey(this.plan, this.focused);
+    const to = this.fitView(focusArea(this.plan, this.focused));
     if (!animate) {
       this.tween = null;
       this.setView(to.target, to.orbit);
@@ -1211,6 +1186,7 @@ export class OfficeScene {
     this.camera.updateProjectionMatrix();
     this.labelKey = '';
     this.planKey = '';
+    this.fitKey = '';
     this.labelsDirty = true;
     this.layout();
     this.syncEffects();

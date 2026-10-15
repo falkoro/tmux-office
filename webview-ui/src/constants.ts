@@ -372,6 +372,8 @@ export const OFFICE3D_CAMERA_FOV = 34;
 /** Fraction of the viewport (NDC half-extent) the fitted office may fill. */
 export const OFFICE3D_FIT_MARGIN = 0.92;
 export const OFFICE3D_FOCUS_DURATION_MS = 900;
+/** Floor framed around a focused pod. */
+export const OFFICE3D_POD_FOCUS_PAD = 0.5;
 /** Pixel ratio range; the renderer steps between them by frame time. Below 1 the scene blurs under crisp labels. */
 export const OFFICE3D_MAX_PIXEL_RATIO = 2;
 export const OFFICE3D_MIN_PIXEL_RATIO = 1;

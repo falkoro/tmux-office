@@ -6,6 +6,7 @@ import {
   OFFICE3D_DESK_PITCH_Z,
   OFFICE3D_NARROW_ASPECT,
   OFFICE3D_NARROW_ROSTER_COLUMNS,
+  OFFICE3D_POD_FOCUS_PAD,
   OFFICE3D_POD_GAP,
   OFFICE3D_POD_PAD,
   OFFICE3D_POD_SIGN_DEPTH,
@@ -15,7 +16,7 @@ import {
   OFFICE3D_ROOM_PAD_X,
   OFFICE3D_ROSTER_LINE_DEPTH,
 } from '../constants.js';
-import type { PodModel, RoomModel } from './model.js';
+import type { Focus, PodModel, RoomModel } from './model.js';
 import { BACKGROUND_ROOM_ID, roomDesks } from './model.js';
 
 /** Centre of one desk slot on the floor plane (x right, z toward the viewer). */
@@ -53,6 +54,40 @@ export interface OfficePlan {
   width: number;
   depth: number;
 }
+
+export interface Bounds {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/** The floor the camera frames for a focus; the whole office when the focus is not in the plan. */
+export function focusArea(plan: OfficePlan, focus: Focus | null): Bounds {
+  const rect =
+    focus?.kind === 'room'
+      ? plan.rooms.find((r) => r.id === focus.id)
+      : focus && plan.rooms.flatMap((r) => r.pods).find((p) => p.id === focus.id);
+  if (!rect) {
+    return {
+      minX: -plan.width / 2,
+      maxX: plan.width / 2,
+      minZ: -plan.depth / 2,
+      maxZ: plan.depth / 2,
+    };
+  }
+  const pad = focus?.kind === 'pod' ? OFFICE3D_POD_FOCUS_PAD : 0;
+  return {
+    minX: rect.x - rect.width / 2 - pad,
+    maxX: rect.x + rect.width / 2 + pad,
+    minZ: rect.z - rect.depth / 2 - pad,
+    maxZ: rect.z + rect.depth / 2 + pad,
+  };
+}
+
+/** The scene refits the camera whenever this changes. */
+export const fitKey = (plan: OfficePlan, focus: Focus | null): string =>
+  JSON.stringify(focusArea(plan, focus));
 
 /** Desks per row inside a pod: a short pod is one row, a big one is close to square. */
 export const podColumns = (desks: number): number =>

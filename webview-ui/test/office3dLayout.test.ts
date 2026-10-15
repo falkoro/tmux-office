@@ -4,7 +4,7 @@ import { describe, test } from 'vitest';
 
 import { OFFICE3D_ROSTER_LINE_DEPTH } from '../src/constants.js';
 import type { OfficePlan, RoomSpot } from '../src/office3d/layout.js';
-import { planOffice } from '../src/office3d/layout.js';
+import { fitKey, planOffice } from '../src/office3d/layout.js';
 import type { DeskModel, PodModel, RoomModel } from '../src/office3d/model.js';
 import { BACKGROUND_ROOM_ID } from '../src/office3d/model.js';
 
@@ -255,5 +255,14 @@ describe('planOffice', () => {
     assert.equal(plan.rooms[0].x, 0);
     assert.equal(plan.rooms[0].z, 0);
     assert.equal(plan.depth, plan.rooms[0].depth);
+  });
+});
+
+describe('fitKey', () => {
+  test('changes when a session sorts ahead of the focused pod', () => {
+    const focus = { kind: 'pod', id: 's-3' } as const;
+    const before = planOffice([room('s', pod('s-3', 1), pod('s-5', 1))], DESKTOP);
+    const after = planOffice([room('s', pod('s-1', 1), pod('s-3', 1))], DESKTOP);
+    assert.notEqual(fitKey(after, focus), fitKey(before, focus));
   });
 });
