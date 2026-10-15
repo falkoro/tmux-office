@@ -8,6 +8,7 @@ import { OFFICE3D_POLL_MS, OFFICE3D_STATUS_COLORS } from '../constants.js';
 import type { AgentTerminalMeta } from '../hooks/useExtensionMessages.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import type { ToolActivity } from '../office/types.js';
+import { isBrowserRuntime } from '../runtime.js';
 import type { Focus, RoomModel } from './model.js';
 import { BACKGROUND_ROOM_ID, deriveOffice, roomHeat } from './model.js';
 import { OfficeScene } from './scene.js';
@@ -52,6 +53,7 @@ export default function Office3D(props: Office3DProps) {
   latest.current = props;
   const [rooms, setRooms] = useState<RoomModel[]>([]);
   const [focused, setFocused] = useState<Focus | null>(null);
+  const [walking, setWalking] = useState(false);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -59,7 +61,7 @@ export default function Office3D(props: Office3DProps) {
     const scene = new OfficeScene(host, {
       onPick: (id) => {
         // Same toggle the 2D canvas makes before it reports a click.
-        const { officeState: os, onClick } = latest.current;
+        const { officeState: os, onClick, agentTerminals } = latest.current;
         os.dismissBubble(id);
         // The pixel view finishes a dismissed fade in its game loop, which does
         // not run here. Without this a looked-at desk would stay done forever.
@@ -72,9 +74,14 @@ export default function Office3D(props: Office3DProps) {
         os.selectedAgentId = deselect ? null : id;
         os.cameraFollowId = deselect ? null : id;
         onClick(id);
+        const parent = os.subagentMeta.get(id)?.parentAgentId ?? id;
+        if (isBrowserRuntime && os.selectedAgentId === id && agentTerminals[parent]?.tmux) {
+          scene.leaveWalk();
+        }
         poll();
       },
       onFocus: setFocused,
+      onWalk: setWalking,
     });
     sceneRef.current = scene;
 
@@ -140,6 +147,15 @@ export default function Office3D(props: Office3DProps) {
             {pod.title}
           </button>
         ))}
+        <button
+          type="button"
+          className="o3d-bar-btn o3d-bar-walk"
+          aria-pressed={walking}
+          title="Walk through the office. Drag to look, WASD or arrows to move, Shift runs, Esc leaves."
+          onClick={() => sceneRef.current?.toggleWalk()}
+        >
+          Walk
+        </button>
       </nav>
     </div>
   );

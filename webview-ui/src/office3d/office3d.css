@@ -222,6 +222,10 @@
   color: var(--o3d-ink-muted);
 }
 
+/* Up close the desk pitch is most of the screen, so an uncapped card covers the room. */
+.o3d-labels[data-walk='true'] .o3d-desk {
+  max-inline-size: min(20em, max(9.5em, calc(var(--o3d-ppm) * 2.3px)));
+}
 .o3d-labels[data-density='compact'] .o3d-desk {
   padding: 2px 4px 3px;
   font-size: 11px;
@@ -543,6 +547,12 @@
 .o3d-bar-pod {
   font-size: 14px;
   font-weight: 500;
+}
+
+.o3d-bar-walk {
+  position: sticky;
+  inset-inline-end: 0;
+  margin-inline-start: auto;
 }
 
 .o3d-bar-sep {

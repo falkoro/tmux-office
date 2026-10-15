@@ -63,6 +63,15 @@ import {
   OFFICE3D_SLOW_FRAME_MS,
   OFFICE3D_SMOOTH_FRAME_MS,
   OFFICE3D_STATS_INTERVAL_MS,
+  OFFICE3D_WALK_ENTRY_PITCH,
+  OFFICE3D_WALK_EYE_Y,
+  OFFICE3D_WALK_FOV,
+  OFFICE3D_WALK_LABEL_RANGE,
+  OFFICE3D_WALK_LOOK,
+  OFFICE3D_WALK_LOOK_SENS,
+  OFFICE3D_WALK_MARGIN,
+  OFFICE3D_WALK_PORCH,
+  OFFICE3D_WALK_TILT,
   OFFICE3D_WALL_HEIGHT,
 } from '../constants.js';
 import { loadCharacter, saveCharacter } from './characterChoice.js';
@@ -101,6 +110,8 @@ import {
   roomHeat,
   STATUS_TEXT,
 } from './model.js';
+import type { FloorBounds, WalkKeys } from './walk.js';
+import { stepWalk, walkDirection, walkYaw } from './walk.js';
 
 export interface OfficeSnapshot {
   rooms: RoomModel[];
@@ -111,6 +122,7 @@ export interface SceneCallbacks {
   onPick(agentId: number): void;
   /** A room, a pod, or null for the whole office. */
   onFocus(focus: Focus | null): void;
+  onWalk(walking: boolean): void;
 }
 
 const MOOD: Record<DeskStatus, CharacterMood> = {
@@ -149,6 +161,41 @@ const FIT_HEIGHT = OFFICE3D_WALL_HEIGHT + 0.4;
 
 const V = new Vector3();
 const V2 = new Vector3();
+
+/** True when a label at this world point should hide. `own` is the box of the desk it belongs to. */
+type Screen = (at: Vector3, own: Box3 | null) => boolean;
+
+const NO_KEYS: WalkKeys = {
+  forward: false,
+  back: false,
+  left: false,
+  right: false,
+  run: false,
+};
+
+const WALK_CODES = new Set([
+  'KeyW',
+  'ArrowUp',
+  'KeyS',
+  'ArrowDown',
+  'KeyA',
+  'ArrowLeft',
+  'KeyD',
+  'ArrowRight',
+  'ShiftLeft',
+  'ShiftRight',
+]);
+
+function isTyping(target: EventTarget | null): boolean {
+  return editable(target) || editable(document.activeElement);
+}
+
+function editable(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -267,6 +314,7 @@ class DeskView {
   private readonly statusEl: HTMLSpanElement;
   private readonly pickEl: HTMLSelectElement;
   private readonly badge: CSS2DObject;
+  private readonly card: CSS2DObject;
   private readonly badgeEl: HTMLDivElement;
   private ppm = '';
 
@@ -318,12 +366,12 @@ class DeskView {
       const kind = this.pickEl.value;
       if (isCharacterKind(kind)) ctx.choose(this.name, kind);
     });
-    const label = new CSS2DObject(this.el);
-    label.position.set(0, LABEL_Y, LABEL_Z);
+    this.card = new CSS2DObject(this.el);
+    this.card.position.set(0, LABEL_Y, LABEL_Z);
     this.badgeEl = el('div', 'o3d-badge');
     this.badge = new CSS2DObject(this.badgeEl);
     this.badge.position.set(0, BADGE_SEATED_Y, SEAT_Z);
-    this.group.add(label, this.badge);
+    this.group.add(this.card, this.badge);
   }
 
   place(spot: DeskSpot, background: boolean): void {
@@ -342,9 +390,15 @@ class DeskView {
   }
 
   /** Size the label to the desk pitch on screen. Every desk has the full pitch, so only depth narrows it. */
-  scaleLabel(ppmAtUnitDepth: number, camera: PerspectiveCamera): void {
+  scaleLabel(ppmAtUnitDepth: number, camera: PerspectiveCamera, screened: Screen | null): void {
     camera.getWorldDirection(V2);
     const depth = V.setFromMatrixPosition(this.group.matrixWorld).sub(camera.position).dot(V2);
+    // Behind the camera, CSS2D projects the card onto the view and it covers the picture.
+    if (depth <= 0 || screened?.(this.card.getWorldPosition(V), this.hit)) {
+      this.el.style.visibility = 'hidden';
+      return;
+    }
+    if (this.el.style.visibility === 'hidden') this.el.style.visibility = '';
     const ppm = (ppmAtUnitDepth / depth).toFixed(0);
     if (ppm === this.ppm) return;
     this.ppm = ppm;
@@ -552,6 +606,12 @@ class RoomView {
     }
   }
 
+  /** Hide the title and plaques that `screened` says are out of sight. */
+  screen(screened: Screen | null): void {
+    this.label.visible = !screened?.(this.label.position, null);
+    for (const sign of this.signs.values()) sign.obj.visible = !screened?.(sign.obj.position, null);
+  }
+
   apply(room: RoomModel): void {
     setText(this.titleEl, room.title);
     this.labelEl.title = `Focus ${room.title}`;
@@ -712,6 +772,18 @@ export class OfficeScene {
   private width = 0;
   private height = 0;
   private down: { x: number; y: number; button: number; dragged: boolean } | null = null;
+  private walking = false;
+  /** Skip OrbitControls until a walk exit glide finishes. Its polar clamp cannot look level. */
+  private holdOrbit = false;
+  private readonly keys = new Set<string>();
+  private walkX = 0;
+  private walkZ = 0;
+  private yaw = 0;
+  private pitch = 0;
+  private walkAt = 0;
+  private readonly walkTo = new Vector3();
+  private readonly walkOffset = new Vector3();
+  private readonly walkOrbit = new Spherical();
   private disposed = false;
   private readonly host: HTMLElement;
   private readonly callbacks: SceneCallbacks;
@@ -801,6 +873,9 @@ export class OfficeScene {
     this.listen(renderer.domElement, 'pointerup', this.onPointerUp);
     this.listen(renderer.domElement, 'pointermove', this.onPointerMove);
     this.listen(renderer.domElement, 'wheel', this.takeOver);
+    this.listen(window, 'keydown', this.onKeyDown);
+    this.listen(window, 'keyup', this.onKeyUp);
+    this.listen(window, 'blur', this.clearKeys);
     this.listen(renderer.domElement, 'pointercancel', () => (this.down = null));
     this.listen(document, 'visibilitychange', this.onVisibility);
     this.listen(window, 'hashchange', this.onHashChange);
@@ -873,6 +948,153 @@ export class OfficeScene {
     this.show(target && focusHash(this.snapshot.rooms, target));
   }
 
+  /** Enter or leave first-person walking. */
+  toggleWalk(): void {
+    if (this.walking) this.leaveWalk();
+    else this.enterWalk();
+  }
+
+  /** Leave walk mode and refit the orbit camera. Safe to call when already orbiting. */
+  leaveWalk(): void {
+    if (!this.walking || this.disposed) return;
+    this.walking = false;
+    this.keys.clear();
+    this.controls.enabled = true;
+    this.camera.fov = OFFICE3D_CAMERA_FOV;
+    this.camera.updateProjectionMatrix();
+    this.userMoved = false;
+    this.holdOrbit = !this.reduced;
+    this.callbacks.onWalk(false);
+    this.applyFocus(!this.reduced);
+  }
+
+  private enterWalk(): void {
+    if (this.disposed) return;
+    this.flushOrbit();
+    this.controls.enabled = false;
+    this.walking = true;
+    this.camera.fov = OFFICE3D_WALK_FOV;
+    this.camera.updateProjectionMatrix();
+    this.keys.clear();
+    this.walkAt = 0;
+    const area = focusArea(this.plan, this.link.focus);
+    const landed = stepWalk(
+      { x: (area.minX + area.maxX) / 2, z: area.maxZ + OFFICE3D_WALK_PORCH },
+      0,
+      NO_KEYS,
+      0,
+      this.floorBounds(),
+    );
+    this.walkX = landed.x;
+    this.walkZ = landed.z;
+    this.yaw = 0;
+    this.pitch = OFFICE3D_WALK_ENTRY_PITCH;
+    this.fillWalkView(this.walkTo, this.walkOrbit);
+    this.glide(this.walkTo, this.walkOrbit, !this.reduced);
+    this.callbacks.onWalk(true);
+  }
+
+  /** Drop leftover orbit damping without moving the camera. */
+  private flushOrbit(): void {
+    const pos = this.camera.position.clone();
+    const tgt = this.controls.target.clone();
+    const damping = this.controls.enableDamping;
+    this.controls.enableDamping = false;
+    this.controls.update();
+    this.controls.enableDamping = damping;
+    this.camera.position.copy(pos);
+    this.controls.target.copy(tgt);
+    this.camera.lookAt(tgt);
+  }
+
+  private floorBounds(): FloorBounds {
+    const m = OFFICE3D_WALK_MARGIN;
+    return {
+      minX: -this.plan.width / 2 + m,
+      maxX: this.plan.width / 2 - m,
+      minZ: -this.plan.depth / 2 + m,
+      maxZ: this.plan.depth / 2 + OFFICE3D_WALK_PORCH,
+    };
+  }
+
+  private fillWalkView(target: Vector3, orbit: Spherical): void {
+    const dir = walkDirection(this.yaw, this.pitch);
+    const look = OFFICE3D_WALK_LOOK;
+    target.set(
+      this.walkX + dir.x * look,
+      OFFICE3D_WALK_EYE_Y + dir.y * look,
+      this.walkZ + dir.z * look,
+    );
+    orbit.setFromVector3(this.walkOffset.set(-dir.x * look, -dir.y * look, -dir.z * look));
+  }
+
+  private placeWalkCamera(): void {
+    this.fillWalkView(this.walkTo, this.walkOrbit);
+    this.setView(this.walkTo, this.walkOrbit);
+  }
+
+  /** The entry glide owns the camera until the viewer looks or steps. */
+  private takeWalkCamera(): void {
+    if (!this.tween) return;
+    this.walkX = this.camera.position.x;
+    this.walkZ = this.camera.position.z;
+    this.camera.getWorldDirection(V);
+    this.yaw = walkYaw(V.x, V.z);
+    const limit = OFFICE3D_WALK_TILT;
+    this.pitch = Math.min(limit, Math.max(-limit, Math.asin(Math.min(1, Math.max(-1, V.y)))));
+    this.tween = null;
+  }
+
+  private lookBy(dx: number, dy: number): void {
+    this.takeWalkCamera();
+    const sens = OFFICE3D_WALK_LOOK_SENS;
+    this.yaw -= dx * sens;
+    const limit = OFFICE3D_WALK_TILT;
+    this.pitch = Math.min(limit, Math.max(-limit, this.pitch - dy * sens));
+    this.placeWalkCamera();
+    if (this.raf === 0) this.walkAt = performance.now();
+    this.requestRender();
+  }
+
+  private armWalk(): void {
+    this.takeWalkCamera();
+    if (this.raf === 0) this.walkAt = performance.now();
+    this.requestRender();
+  }
+
+  private integrateWalk(now: number): void {
+    const prev = this.walkAt;
+    this.walkAt = now;
+    if (this.tween || !this.moving()) return;
+    const dt = prev === 0 ? 0 : Math.min(0.1, (now - prev) / 1000);
+    const next = stepWalk(
+      { x: this.walkX, z: this.walkZ },
+      this.yaw,
+      this.walkKeys(),
+      dt,
+      this.floorBounds(),
+    );
+    this.walkX = next.x;
+    this.walkZ = next.z;
+    this.placeWalkCamera();
+  }
+
+  private moving(): boolean {
+    const k = this.walkKeys();
+    return k.forward || k.back || k.left || k.right;
+  }
+
+  private walkKeys(): WalkKeys {
+    const k = this.keys;
+    return {
+      forward: k.has('KeyW') || k.has('ArrowUp'),
+      back: k.has('KeyS') || k.has('ArrowDown'),
+      left: k.has('KeyA') || k.has('ArrowLeft'),
+      right: k.has('KeyD') || k.has('ArrowRight'),
+      run: k.has('ShiftLeft') || k.has('ShiftRight'),
+    };
+  }
+
   private show(hash: string | null): void {
     if (this.disposed) return;
     this.link.point(hash, this.snapshot.rooms);
@@ -924,7 +1146,10 @@ export class OfficeScene {
     this.adaptPixelRatio(now);
     const t = now / 1000;
     const tweening = this.stepTween(now);
-    const moved = this.controls.update();
+    if (this.walking) this.integrateWalk(now);
+    if (!tweening) this.holdOrbit = false;
+    // OrbitControls clamps polar angle short of horizontal, so it would pitch an eye-level view back down.
+    const moved = this.walking || this.holdOrbit ? false : this.controls.update();
     let busy = false;
     for (const desk of this.deskList) busy = desk.step(t, this.reduced) || busy;
     busy = this.fx.step(t, this.reduced) || busy;
@@ -935,15 +1160,18 @@ export class OfficeScene {
       this.labelsDirty = false;
       this.lastCamera.copy(this.camera.matrixWorld);
       const ppmAtUnitDepth = this.height / (2 * Math.tan(MathUtils.degToRad(this.camera.fov / 2)));
-      for (const desk of this.deskList) desk.scaleLabel(ppmAtUnitDepth, this.camera);
+      const screened = this.walking || this.holdOrbit ? this.screened : null;
+      for (const desk of this.deskList) desk.scaleLabel(ppmAtUnitDepth, this.camera, screened);
+      for (const room of this.rooms.values()) room.screen(screened);
       this.labels.render(this.scene, this.camera);
     }
     this.countFrame(now);
 
-    if (tweening || moved || busy) {
+    if (tweening || moved || busy || (this.walking && this.moving())) {
       this.raf = requestAnimationFrame(this.frame);
       return;
     }
+    this.walkAt = 0;
     this.lastFrame = 0;
     let wake = Infinity;
     for (const desk of this.deskList) wake = Math.min(wake, desk.wakeIn(t, this.reduced));
@@ -1015,20 +1243,29 @@ export class OfficeScene {
 
   /** Label size, density and fog follow the zoom. */
   private syncCameraDependents(): void {
-    const dist = this.camera.position.distanceTo(this.controls.target);
+    const dist = Math.max(0.5, this.camera.position.distanceTo(this.controls.target));
     const ppm = this.height / (2 * dist * Math.tan(MathUtils.degToRad(this.camera.fov / 2)));
     const pitch = ppm * OFFICE3D_DESK_PITCH_X;
-    const density =
+    // holdOrbit covers the glide back up: the camera is still low after walking turns off.
+    const eyeLevel = this.walking || this.holdOrbit;
+    // The roster is a floor list for the overhead view. At eye height it covers the room, so names stay on the desks.
+    let density =
       pitch >= OFFICE3D_FULL_LABEL_PX
         ? 'full'
         : pitch >= OFFICE3D_COMPACT_LABEL_PX
           ? 'compact'
           : 'roster';
-    const key = `${ppm.toFixed(1)}|${density}`;
+    if (eyeLevel && density === 'roster') density = 'compact';
+    // Plaques use one pixels-per-metre. Eye height would size them as if every sign were a few metres away.
+    const labelPpm = eyeLevel ? Math.min(ppm, OFFICE3D_FULL_LABEL_PX / OFFICE3D_DESK_PITCH_X) : ppm;
+    const key = `${labelPpm.toFixed(1)}|${density}|${eyeLevel ? 1 : 0}`;
     if (key === this.labelKey) return;
+    // Leaving eye level must show the screened labels again, even when the camera already holds still.
+    this.labelsDirty = true;
     this.labelKey = key;
-    this.labels.domElement.style.setProperty('--o3d-ppm', ppm.toFixed(1));
+    this.labels.domElement.style.setProperty('--o3d-ppm', labelPpm.toFixed(1));
     this.labels.domElement.dataset.density = density;
+    this.labels.domElement.dataset.walk = String(eyeLevel);
     this.fog.near = dist * 1.6;
     this.fog.far = dist * 4;
   }
@@ -1079,17 +1316,22 @@ export class OfficeScene {
     }
 
     const key = fitKey(this.plan, this.link.focus);
-    if (!this.userMoved && key !== null && key !== this.fitKey) {
+    if (!this.userMoved && !this.walking && key !== null && key !== this.fitKey) {
       this.applyFocus(animate);
     }
   }
 
   private applyFocus(animate: boolean): void {
     this.fitKey = fitKey(this.plan, this.link.focus);
+    if (this.walking) return;
     const to = this.fitView(focusArea(this.plan, this.link.focus));
+    this.glide(to.target, to.orbit, animate);
+  }
+
+  private glide(target: Vector3, orbit: Spherical, animate: boolean): void {
     if (!animate) {
       this.tween = null;
-      this.setView(to.target, to.orbit);
+      this.setView(target, orbit);
     } else {
       this.tween = {
         start: performance.now(),
@@ -1097,8 +1339,8 @@ export class OfficeScene {
         fromOrbit: new Spherical().setFromVector3(
           V.copy(this.camera.position).sub(this.controls.target),
         ),
-        toTarget: to.target,
-        toOrbit: to.orbit,
+        toTarget: target.clone(),
+        toOrbit: orbit.clone(),
       };
     }
     this.requestRender();
@@ -1108,6 +1350,8 @@ export class OfficeScene {
     this.controls.target.copy(target);
     this.camera.position.setFromSpherical(orbit).add(target);
     this.camera.lookAt(target);
+    // lookAt samples the old matrix, then sets the quaternion. A pick in the same turn needs the new one.
+    this.camera.updateMatrixWorld();
   }
 
   private stepTween(now: number): boolean {
@@ -1208,6 +1452,23 @@ export class OfficeScene {
     this.requestRender();
   }
 
+  /** CSS2D labels have no depth test. At eye level, hide one past the walk range or behind a nearer desk. */
+  private readonly screened: Screen = (at, own) => {
+    const ray = this.raycaster.ray;
+    ray.origin.copy(this.camera.position);
+    const dist = ray.direction.subVectors(at, ray.origin).length();
+    if (dist > OFFICE3D_WALK_LABEL_RANGE) return true;
+    ray.direction.divideScalar(dist);
+    // ponytail: only desks block labels, not walls or furniture; depth-tested sprite labels would cover those.
+    return this.deskList.some(
+      (d) =>
+        d.hit !== own &&
+        !d.hit.containsPoint(ray.origin) &&
+        ray.intersectBox(d.hit, this.hitPoint) !== null &&
+        this.hitPoint.distanceTo(ray.origin) < dist,
+    );
+  };
+
   /** The nearest desk or helper under the pointer. */
   private pick(e: PointerEvent): number | null {
     const rect = this.renderer.domElement.getBoundingClientRect();
@@ -1245,8 +1506,9 @@ export class OfficeScene {
     this.cleanup.push(() => target.removeEventListener(type, fn, options));
   }
 
-  /** The user steered the camera: stop gliding and stop refitting on layout changes. */
+  /** The user steered the orbit camera: stop gliding and stop refitting on layout changes. */
   private readonly takeOver = (): void => {
+    if (this.walking) return;
     this.tween = null;
     this.userMoved = true;
   };
@@ -1254,9 +1516,13 @@ export class OfficeScene {
   // A click must not count as steering, or the first pick would freeze the fit.
   private readonly onPointerDown = (e: PointerEvent): void => {
     this.down = { x: e.clientX, y: e.clientY, button: e.button, dragged: false };
+    if (this.walking && e.button === 0) this.renderer.domElement.setPointerCapture(e.pointerId);
   };
 
   private readonly onPointerUp = (e: PointerEvent): void => {
+    if (this.renderer.domElement.hasPointerCapture(e.pointerId)) {
+      this.renderer.domElement.releasePointerCapture(e.pointerId);
+    }
     const down = this.down;
     this.down = null;
     if (!down || down.dragged || down.button !== 0) return;
@@ -1267,6 +1533,18 @@ export class OfficeScene {
   private readonly onPointerMove = (e: PointerEvent): void => {
     const down = this.down;
     if (down) {
+      if (this.walking && down.button === 0) {
+        const dx = e.clientX - down.x;
+        const dy = e.clientY - down.y;
+        if (!down.dragged) {
+          if (Math.hypot(dx, dy) <= OFFICE3D_CLICK_SLOP_PX) return;
+          down.dragged = true;
+        }
+        this.lookBy(dx, dy);
+        down.x = e.clientX;
+        down.y = e.clientY;
+        return;
+      }
       if (
         !down.dragged &&
         Math.hypot(e.clientX - down.x, e.clientY - down.y) > OFFICE3D_CLICK_SLOP_PX
@@ -1280,8 +1558,31 @@ export class OfficeScene {
     this.renderer.domElement.style.cursor = this.pick(e) === null ? '' : 'pointer';
   };
 
+  private readonly onKeyDown = (e: KeyboardEvent): void => {
+    if (!this.walking) return;
+    if (e.code === 'Escape') {
+      e.preventDefault();
+      this.leaveWalk();
+      return;
+    }
+    if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!WALK_CODES.has(e.code)) return;
+    e.preventDefault();
+    this.keys.add(e.code);
+    this.armWalk();
+  };
+
+  private readonly onKeyUp = (e: KeyboardEvent): void => {
+    this.keys.delete(e.code);
+  };
+
+  private readonly clearKeys = (): void => {
+    this.keys.clear();
+  };
+
   private readonly onVisibility = (): void => {
     if (document.hidden) {
+      this.clearKeys();
       cancelAnimationFrame(this.raf);
       clearTimeout(this.timer);
       this.raf = 0;
