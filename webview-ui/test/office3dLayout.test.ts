@@ -290,4 +290,11 @@ describe('fitKey', () => {
     const after = planOffice([room('s', pod('s-1', 1), pod('s-3', 1))], DESKTOP);
     assert.notEqual(fitKey(after, focus), fitKey(before, focus));
   });
+
+  test('holds while the focused pod drops out of the plan for a poll', () => {
+    const focus = { kind: 'pod', id: 's-3' } as const;
+    const gone = planOffice([room('s', pod('s-5', 1))], DESKTOP);
+    assert.equal(fitKey(gone, focus), null);
+    assert.notEqual(fitKey(gone, null), null);
+  });
 });

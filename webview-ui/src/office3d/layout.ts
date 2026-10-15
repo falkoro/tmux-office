@@ -68,12 +68,14 @@ export interface Bounds {
   maxZ: number;
 }
 
+const focusRect = (plan: OfficePlan, focus: Focus) =>
+  focus.kind === 'room'
+    ? plan.rooms.find((r) => r.id === focus.id)
+    : plan.rooms.flatMap((r) => r.pods).find((p) => p.id === focus.id);
+
 /** The floor the camera frames for a focus; the whole office when the focus is not in the plan. */
 export function focusArea(plan: OfficePlan, focus: Focus | null): Bounds {
-  const rect =
-    focus?.kind === 'room'
-      ? plan.rooms.find((r) => r.id === focus.id)
-      : focus && plan.rooms.flatMap((r) => r.pods).find((p) => p.id === focus.id);
+  const rect = focus && focusRect(plan, focus);
   if (!rect) {
     return {
       minX: -plan.width / 2,
@@ -91,9 +93,13 @@ export function focusArea(plan: OfficePlan, focus: Focus | null): Bounds {
   };
 }
 
-/** The scene refits the camera whenever this changes. */
-export const fitKey = (plan: OfficePlan, focus: Focus | null): string =>
-  JSON.stringify(focusArea(plan, focus));
+/**
+ * The scene refits the camera whenever this changes. Null while the focus is
+ * missing from the plan, so a brief drop-out holds the view instead of gliding
+ * to the whole office and back.
+ */
+export const fitKey = (plan: OfficePlan, focus: Focus | null): string | null =>
+  focus && !focusRect(plan, focus) ? null : JSON.stringify(focusArea(plan, focus));
 
 /** Desks per row inside a pod: a short pod is one row, a big one is close to square. */
 export const podColumns = (desks: number): number =>

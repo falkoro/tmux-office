@@ -691,7 +691,7 @@ export class OfficeScene {
   private snapshot: OfficeSnapshot = { rooms: [], selectedId: null };
   private plan: OfficePlan = planOffice([], 1);
   private planKey = '';
-  private fitKey = '';
+  private fitKey: string | null = '';
   private readonly link = new FocusLink(readHash());
   private userMoved = false;
   private tween: Tween | null = null;
@@ -1078,7 +1078,8 @@ export class OfficeScene {
       );
     }
 
-    if (!this.userMoved && fitKey(this.plan, this.link.focus) !== this.fitKey) {
+    const key = fitKey(this.plan, this.link.focus);
+    if (!this.userMoved && key !== null && key !== this.fitKey) {
       this.applyFocus(animate);
     }
   }
