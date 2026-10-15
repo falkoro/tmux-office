@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { CliArgsError, parseArgs } from '../src/cli.js';
+import { accessConfigFromEnv, CliArgsError, parseArgs } from '../src/cli.js';
 import { CLAUDE_HOOK_EVENTS } from '../src/providers/hook/claude/constants.js';
 
 const CLI_BUNDLE = path.join(__dirname, '../../dist/cli.js');
@@ -155,6 +155,34 @@ describe('parseArgs', () => {
  * Requires `npm run compile` (or `node esbuild.js`) to have produced
  * dist/cli.js first; reported as a loud skip if it hasn't.
  */
+describe('accessConfigFromEnv', () => {
+  const TEAM = 'example.cloudflareaccess.com';
+
+  it('is off when neither Access variable is set', () => {
+    expect(accessConfigFromEnv({})).toBeUndefined();
+  });
+
+  it('reads both Access variables', () => {
+    expect(
+      accessConfigFromEnv({
+        PIXEL_AGENTS_ACCESS_TEAM_DOMAIN: TEAM,
+        PIXEL_AGENTS_ACCESS_AUD: 'aud',
+      }),
+    ).toEqual({ teamDomain: TEAM, aud: 'aud' });
+  });
+
+  it('refuses to start without the gate when only one Access variable is set', () => {
+    expect(() => accessConfigFromEnv({ PIXEL_AGENTS_ACCESS_TEAM_DOMAIN: TEAM })).toThrow(
+      new CliArgsError(
+        'PIXEL_AGENTS_ACCESS_AUD is not set. Set both Access variables, or neither.',
+      ),
+    );
+    expect(() => accessConfigFromEnv({ PIXEL_AGENTS_ACCESS_AUD: 'aud' })).toThrow(
+      /PIXEL_AGENTS_ACCESS_TEAM_DOMAIN is not set/,
+    );
+  });
+});
+
 describe('dist/cli.js entry-point guard', () => {
   /** These tests spawn the BUNDLED CLI, so they need `npm run compile` to have
    *  run. Reported as a loud skip rather than an early `return`, which Vitest

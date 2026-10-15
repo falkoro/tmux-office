@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HooksConsentRequest, OfficeRooms } from '../../../core/src/messages.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
-import { reconcileExistingAgents } from '../office/engine/existingAgents.js';
+import { clearMissingTerminals, reconcileExistingAgents } from '../office/engine/existingAgents.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import { setGhostHeadlessAgents as setRendererGhostHeadlessAgents } from '../office/engine/renderer.js';
 import { setFloorSprites } from '../office/floorTiles.js';
@@ -424,6 +424,7 @@ export function useExtensionMessages(
           Record<string, { name?: string | null; tmux?: unknown }> | undefined;
         terminalsRef.current = {};
         setAgentTerminals(terminalsRef.current);
+        clearMissingTerminals(os.characters, incomingTerminals ?? {});
         if (incomingTerminals) {
           for (const [rawId, info] of Object.entries(incomingTerminals)) {
             const id = Number(rawId);

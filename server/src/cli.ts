@@ -11,7 +11,13 @@
 import * as path from 'path';
 
 import { parseBackground, parseGlobs, parseRoomConfig } from '../../core/src/roomPatterns.js';
-import { type AccessVerifier, createAccessVerifier, type JwksDocument } from './accessJwt.js';
+import {
+  type AccessJwtConfig,
+  accessTeamHost,
+  type AccessVerifier,
+  createAccessVerifier,
+  type JwksDocument,
+} from './accessJwt.js';
 import { AgentRuntime } from './agentRuntime.js';
 import { AgentStateStore } from './agentStateStore.js';
 import {
@@ -27,7 +33,7 @@ import {
   grantHooksConsent,
   readConfig,
 } from './configPersistence.js';
-import { MAX_PORT, MIN_PORT } from './constants.js';
+import { ACCESS_JWKS_FETCH_TIMEOUT_MS, MAX_PORT, MIN_PORT } from './constants.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
 import { OfficeFeedState } from './officeFeed.js';
 import { ClaudeSessionRegistry } from './providers/hook/claude/claudeSessionRegistry.js';
@@ -102,6 +108,31 @@ Options:
   return args;
 }
 
+/**
+ * The Access gate's settings: both variables or neither. One alone is most
+ * likely a typo, and starting without the gate would open the office.
+ */
+export function accessConfigFromEnv(env: NodeJS.ProcessEnv): AccessJwtConfig | undefined {
+  const teamDomain = env.PIXEL_AGENTS_ACCESS_TEAM_DOMAIN;
+  const aud = env.PIXEL_AGENTS_ACCESS_AUD;
+  if (!teamDomain && !aud) return undefined;
+  if (!teamDomain || !aud) {
+    const missing = teamDomain ? 'PIXEL_AGENTS_ACCESS_AUD' : 'PIXEL_AGENTS_ACCESS_TEAM_DOMAIN';
+    throw new CliArgsError(`${missing} is not set. Set both Access variables, or neither.`);
+  }
+  return { teamDomain, aud };
+}
+
+function accessVerifier(config: AccessJwtConfig): AccessVerifier {
+  return createAccessVerifier(config, async (url) => {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(ACCESS_JWKS_FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) throw new Error(`access certs status ${response.status}`);
+    return (await response.json()) as JwksDocument;
+  });
+}
+
 // ── Hooks consent ─────────────────────────────────────────────
 // First-run consent is asked IN THE APP, not here: the server sends a
 // hooksConsentRequest to privileged (tokened) connections during the
@@ -119,17 +150,6 @@ Options:
  * Claude Code spawn a dead `node` process for every event, which is strictly
  * worse than no hooks at all.
  */
-function accessVerifierFromEnv(): AccessVerifier | undefined {
-  const team = process.env.PIXEL_AGENTS_ACCESS_TEAM_DOMAIN;
-  const aud = process.env.PIXEL_AGENTS_ACCESS_AUD;
-  if (!team || !aud) return undefined;
-  return createAccessVerifier({ teamDomain: team, aud }, async (url) => {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`access certs status ${response.status}`);
-    return (await response.json()) as JwksDocument;
-  });
-}
-
 function copyHookScriptOrReport(packageRoot: string, context = ''): boolean {
   if (copyHookScript(packageRoot)) return true;
   console.error(`[Pixel Agents] Hooks NOT installed${context}: hook script missing.`);
@@ -140,11 +160,18 @@ function copyHookScriptOrReport(packageRoot: string, context = ''): boolean {
 
 async function main(): Promise<void> {
   let args: CliArgs;
+  let access: AccessJwtConfig | undefined;
   try {
     args = parseArgs(process.argv.slice(2));
+    access = accessConfigFromEnv(process.env);
   } catch (err) {
     console.error(`[Pixel Agents] ${err instanceof Error ? err.message : String(err)}`);
     process.exit(1);
+  }
+  if (access) {
+    console.log(
+      `[Pixel Agents] Cloudflare Access gate on for ${accessTeamHost(access.teamDomain)}`,
+    );
   }
 
   // dist/ contains both the CLI bundle and the assets/ + webview/ directories
@@ -302,7 +329,7 @@ async function main(): Promise<void> {
       onSetHooksEnabled,
       onReloadAssets,
       insecureLocalTerminal: args.insecureLocalTerminal,
-      access: accessVerifierFromEnv(),
+      access: access && accessVerifier(access),
       officeFeed,
       officeEmbedOrigins: (process.env.PIXEL_AGENTS_OFFICE_EMBED_ORIGINS ?? '')
         .split(/[\s,]+/)

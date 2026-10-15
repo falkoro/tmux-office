@@ -67,13 +67,18 @@ describe('parseSessionFile', () => {
     expect(parsed?.name).toBeNull();
   });
 
-  it('drops a file whose tmux string or pid is unusable', () => {
-    expect(
-      parseSessionFile(
-        JSON.stringify({ pid: 4, sessionId: 's', cwd: '/work', tmux: 'not-tmux' }),
+  it('keeps a session whose tmux location does not parse, without a location', () => {
+    for (const tmux of ['my work:@1.%2', 'not-tmux', 42]) {
+      const parsed = parseSessionFile(
+        JSON.stringify({ pid: 4, sessionId: 's', cwd: '/work', tmux }),
         configDir,
-      ),
-    ).toBeNull();
+      );
+      expect(parsed?.sessionId).toBe('s');
+      expect(parsed?.tmux).toBeNull();
+    }
+  });
+
+  it('drops a file whose pid is unusable', () => {
     expect(
       parseSessionFile(JSON.stringify({ pid: 0, sessionId: 's', cwd: '/work' }), configDir),
     ).toBeNull();

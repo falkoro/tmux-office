@@ -14,6 +14,7 @@ const MAX_DIMENSION = 500;
 const FALLBACK_COLS = 80;
 const FALLBACK_ROWS = 24;
 const THROWAWAY_PREFIX = 'pa-web-';
+const THROWAWAY_SESSION = /^pa-web-[0-9a-f]{16}$/;
 
 export function tmuxSocketName(): string | undefined {
   const name = process.env.PIXEL_AGENTS_TMUX_SOCKET;
@@ -164,7 +165,7 @@ export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
     const paneId = parts[0] ?? '';
     const windowId = parts[parts.length - 1] ?? '';
     const session = parts.slice(1, -1).join(' ');
-    if (!paneId || !session || !windowId || session.startsWith(THROWAWAY_PREFIX)) {
+    if (!paneId || !session || !windowId || THROWAWAY_SESSION.test(session)) {
       continue;
     }
     panes.push({ paneId, session, windowId });
@@ -186,7 +187,7 @@ export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
 }
 
 export async function killThrowawaySession(sessionName: string): Promise<void> {
-  if (!sessionName.startsWith(THROWAWAY_PREFIX)) return;
+  if (!THROWAWAY_SESSION.test(sessionName)) return;
   try {
     await execFileAsync('tmux', [...tmuxSocketArgs(), 'kill-session', '-t', sessionName], {
       timeout: 2000,

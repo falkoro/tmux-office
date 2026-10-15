@@ -18,7 +18,7 @@ import {
   CHARACTER_SEAT_HEIGHT,
 } from '../src/office3d/characters.js';
 import type { WalkKeys } from '../src/office3d/walk.js';
-import { stepWalk, walkDirection, walkForward } from '../src/office3d/walk.js';
+import { stepWalk, walkDirection, walkForward, walkFromCamera } from '../src/office3d/walk.js';
 
 const bounds = { minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
 const idle: WalkKeys = { forward: false, back: false, left: false, right: false, run: false };
@@ -78,6 +78,25 @@ describe('stepWalk', () => {
     const outside = stepWalk({ x: 8, z: -8 }, 0, idle, 1, box);
     assert.equal(outside.x, 1);
     assert.equal(outside.z, -2);
+  });
+});
+
+describe('walkFromCamera', () => {
+  test('a camera taken over mid-glide behind the porch lands on the floor', () => {
+    // An overview camera 25 m behind a floor that ends at z = 10, looking down into the rooms.
+    const pose = walkFromCamera({ x: 3, z: 25 }, { x: 0, y: -0.6, z: -0.8 }, bounds);
+    near(pose.x, 3);
+    near(pose.z, bounds.maxZ);
+    near(pose.yaw, 0);
+    near(pose.pitch, Math.asin(-0.6));
+  });
+
+  test('a camera already on the floor keeps its spot', () => {
+    const pose = walkFromCamera({ x: -4, z: 2 }, { x: -1, y: 0, z: 0 }, bounds);
+    near(pose.x, -4);
+    near(pose.z, 2);
+    near(pose.yaw, Math.PI / 2);
+    near(pose.pitch, 0);
   });
 });
 

@@ -111,7 +111,7 @@ import {
   STATUS_TEXT,
 } from './model.js';
 import type { FloorBounds, WalkKeys } from './walk.js';
-import { stepWalk, walkDirection, walkYaw } from './walk.js';
+import { NO_WALK_KEYS, stepWalk, walkDirection, walkFromCamera } from './walk.js';
 
 export interface OfficeSnapshot {
   rooms: RoomModel[];
@@ -164,14 +164,6 @@ const V2 = new Vector3();
 
 /** True when a label at this world point should hide. `own` is the box of the desk it belongs to. */
 type Screen = (at: Vector3, own: Box3 | null) => boolean;
-
-const NO_KEYS: WalkKeys = {
-  forward: false,
-  back: false,
-  left: false,
-  right: false,
-  run: false,
-};
 
 const WALK_CODES = new Set([
   'KeyW',
@@ -981,7 +973,7 @@ export class OfficeScene {
     const landed = stepWalk(
       { x: (area.minX + area.maxX) / 2, z: area.maxZ + OFFICE3D_WALK_PORCH },
       0,
-      NO_KEYS,
+      NO_WALK_KEYS,
       0,
       this.floorBounds(),
     );
@@ -1036,13 +1028,14 @@ export class OfficeScene {
   /** The entry glide owns the camera until the viewer looks or steps. */
   private takeWalkCamera(): void {
     if (!this.tween) return;
-    this.walkX = this.camera.position.x;
-    this.walkZ = this.camera.position.z;
     this.camera.getWorldDirection(V);
-    this.yaw = walkYaw(V.x, V.z);
-    const limit = OFFICE3D_WALK_TILT;
-    this.pitch = Math.min(limit, Math.max(-limit, Math.asin(Math.min(1, Math.max(-1, V.y)))));
+    const pose = walkFromCamera(this.camera.position, V, this.floorBounds());
+    this.walkX = pose.x;
+    this.walkZ = pose.z;
+    this.yaw = pose.yaw;
+    this.pitch = pose.pitch;
     this.tween = null;
+    this.placeWalkCamera();
   }
 
   private lookBy(dx: number, dy: number): void {

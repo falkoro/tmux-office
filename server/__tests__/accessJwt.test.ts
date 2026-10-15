@@ -1,6 +1,6 @@
 import { createSign, generateKeyPairSync, type KeyObject } from 'node:crypto';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   accessCertsUrl,
@@ -9,6 +9,7 @@ import {
   keysFromJwks,
   verifyAccessJwt,
 } from '../src/accessJwt.js';
+import { ACCESS_JWKS_CACHE_MS, ACCESS_JWKS_RETRY_MS } from '../src/constants.js';
 
 const TEAM = 'example.cloudflareaccess.com';
 const AUD = 'aud-test';
@@ -133,5 +134,40 @@ describe('createAccessVerifier', () => {
     await Promise.all(tokens.map((token) => verifier.verify(token)));
     for (const token of tokens) await verifier.verify(token);
     expect(fetches).toBe(2);
+  });
+
+  describe('when a refresh fails', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('keeps the loaded keys and waits before fetching again', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      const { privateKey, jwks } = keyPair();
+      let fetches = 0;
+      let down = false;
+      const verifier = createAccessVerifier({ teamDomain: TEAM, aud: AUD }, async () => {
+        fetches += 1;
+        if (down) throw new Error('team domain unreachable');
+        return jwks;
+      });
+      await expect(verifier.verify(sign(privateKey, payload()))).resolves.toEqual({
+        ok: true,
+        email: 'a@b',
+      });
+
+      down = true;
+      vi.setSystemTime(Date.now() + ACCESS_JWKS_CACHE_MS + 1);
+      await expect(verifier.verify(sign(privateKey, payload()))).resolves.toEqual({
+        ok: true,
+        email: 'a@b',
+      });
+      await verifier.verify(sign(privateKey, payload()));
+      expect(fetches).toBe(2);
+
+      vi.setSystemTime(Date.now() + ACCESS_JWKS_RETRY_MS + 1);
+      await verifier.verify(sign(privateKey, payload()));
+      expect(fetches).toBe(3);
+    });
   });
 });

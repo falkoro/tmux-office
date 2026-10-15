@@ -23,7 +23,10 @@ import type {
   ExistingAgentsOffice,
   PendingAgent,
 } from '../src/office/engine/existingAgents.js';
-import { reconcileExistingAgents } from '../src/office/engine/existingAgents.js';
+import {
+  clearMissingTerminals,
+  reconcileExistingAgents,
+} from '../src/office/engine/existingAgents.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -176,4 +179,23 @@ test('layout ready: agent with no metadata is still added with undefined fields'
       folderName: undefined,
     },
   ]);
+});
+
+// ── reconnect snapshot drops tmux placement it no longer vouches for ──
+
+test('reconnect: a character missing from the terminal snapshot loses its pane and name', () => {
+  const pane = { session: 'work', windowId: '@1', paneId: '%5' };
+  const gone: { tmux?: unknown; sessionName?: string | null } = { tmux: pane, sessionName: 'work' };
+  const kept: { tmux?: unknown; sessionName?: string | null } = { tmux: pane, sessionName: 'demo' };
+  const characters = new Map([
+    [1, gone],
+    [2, kept],
+  ]);
+
+  clearMissingTerminals(characters, { 2: { name: 'demo', tmux: pane } });
+
+  assert.equal(gone.tmux, null);
+  assert.equal(gone.sessionName, null);
+  assert.deepEqual(kept.tmux, pane);
+  assert.equal(kept.sessionName, 'demo');
 });

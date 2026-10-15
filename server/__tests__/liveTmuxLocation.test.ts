@@ -66,6 +66,15 @@ describe('resolveLiveTmuxLocations', () => {
     expect(locations.get('s1')).toEqual({ session: 'demo', windowId: '@2', paneId: '%5' });
   });
 
+  it('keeps a user session whose name only starts like a web terminal', () => {
+    const panes = parseTmuxPaneList('%5 pa-web-dev @2\n');
+    const locations = resolveLiveTmuxLocations(
+      [{ sessionId: 's1', tmux: { session: 'demo', windowId: '@2', paneId: '%5' } }],
+      panes,
+    );
+    expect(locations.get('s1')).toEqual({ session: 'pa-web-dev', windowId: '@2', paneId: '%5' });
+  });
+
   it('leaves a session that has no tmux unset', () => {
     const locations = resolveLiveTmuxLocations([{ sessionId: 's1', tmux: null }], [movedPane]);
     expect(locations.get('s1')).toBeNull();

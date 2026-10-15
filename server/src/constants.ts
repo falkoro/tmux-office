@@ -55,6 +55,10 @@ export const TERM_SIZE_POLL_INTERVAL_MS = 2_000;
 export const ACCESS_JWKS_CACHE_MS = 10 * 60 * 1000;
 /** At most one unknown-kid refetch of the Access signing keys per this window. */
 export const ACCESS_JWKS_MIN_REFETCH_MS = 30_000;
+/** A fetch of the Access signing keys gives up after this long. */
+export const ACCESS_JWKS_FETCH_TIMEOUT_MS = 5_000;
+/** After a failed fetch of the Access signing keys, wait this long before trying again. */
+export const ACCESS_JWKS_RETRY_MS = 10_000;
 /** Clock skew tolerated on Access JWT `exp` / `nbf` (seconds). */
 export const ACCESS_JWT_CLOCK_SKEW_SEC = 60;
 

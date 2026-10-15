@@ -5,7 +5,7 @@
  * here cannot disagree.
  */
 
-import { OFFICE3D_WALK_RUN, OFFICE3D_WALK_SPEED } from '../constants.js';
+import { OFFICE3D_WALK_RUN, OFFICE3D_WALK_SPEED, OFFICE3D_WALK_TILT } from '../constants.js';
 
 export interface WalkPos {
   x: number;
@@ -27,6 +27,14 @@ export interface FloorBounds {
   minZ: number;
   maxZ: number;
 }
+
+export const NO_WALK_KEYS: WalkKeys = {
+  forward: false,
+  back: false,
+  left: false,
+  right: false,
+  run: false,
+};
 
 /** Horizontal facing. Yaw 0 is −z. */
 export function walkForward(yaw: number): WalkPos {
@@ -76,4 +84,19 @@ export function stepWalk(
   }
   // ponytail: clamp to the floor rectangle only; walking stops for desks once the merged furniture has a collider.
   return { x: clamp(x, bounds.minX, bounds.maxX), z: clamp(z, bounds.minZ, bounds.maxZ) };
+}
+
+/**
+ * The walker pose a camera hands over, for example mid-glide. The camera may
+ * still be off the floor, so the position is clamped into `bounds`.
+ */
+export function walkFromCamera(
+  position: WalkPos,
+  direction: { x: number; y: number; z: number },
+  bounds: FloorBounds,
+): WalkPos & { yaw: number; pitch: number } {
+  const yaw = walkYaw(direction.x, direction.z);
+  const tilt = OFFICE3D_WALK_TILT;
+  const pitch = clamp(Math.asin(clamp(direction.y, -1, 1)), -tilt, tilt);
+  return { ...stepWalk(position, yaw, NO_WALK_KEYS, 0, bounds), yaw, pitch };
 }

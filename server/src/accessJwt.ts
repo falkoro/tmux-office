@@ -3,6 +3,7 @@ import { createPublicKey, createVerify, type KeyObject, webcrypto } from 'node:c
 import {
   ACCESS_JWKS_CACHE_MS,
   ACCESS_JWKS_MIN_REFETCH_MS,
+  ACCESS_JWKS_RETRY_MS,
   ACCESS_JWT_CLOCK_SKEW_SEC,
 } from './constants.js';
 
@@ -129,6 +130,8 @@ export function verifyAccessJwt(
 
 /**
  * Cached JWKS plus one refetch when the token names a kid we have not seen.
+ * A failed fetch keeps the keys already loaded and holds off further fetches
+ * for ACCESS_JWKS_RETRY_MS.
  */
 export function createAccessVerifier(
   config: AccessJwtConfig,
@@ -139,11 +142,13 @@ export function createAccessVerifier(
   let keys = new Map<string, KeyObject>();
   let fetchedAt = 0;
   let forcedAt = Number.NEGATIVE_INFINITY;
+  let failedAt = Number.NEGATIVE_INFINITY;
   let inflight: Promise<void> | null = null;
 
   async function load(force: boolean): Promise<void> {
     const now = Date.now();
     if (!force && keys.size > 0 && now - fetchedAt < ACCESS_JWKS_CACHE_MS) return;
+    if (now - failedAt < ACCESS_JWKS_RETRY_MS) return;
     if (inflight) return inflight;
     // The kid comes from the request, so a stream of made-up kids must not
     // turn into a stream of fetches to the team domain.
@@ -152,10 +157,15 @@ export function createAccessVerifier(
       forcedAt = now;
     }
     inflight = fetchJwks(url)
-      .then((doc) => {
-        keys = keysFromJwks(doc);
-        fetchedAt = Date.now();
-      })
+      .then(
+        (doc) => {
+          keys = keysFromJwks(doc);
+          fetchedAt = Date.now();
+        },
+        () => {
+          failedAt = Date.now();
+        },
+      )
       .finally(() => {
         inflight = null;
       });
@@ -165,18 +175,10 @@ export function createAccessVerifier(
   return {
     async verify(token) {
       if (!token) return { ok: false };
-      try {
-        await load(false);
-      } catch {
-        return { ok: false };
-      }
+      await load(false);
       let result = verifyAccessJwt(token, { issuer, aud: config.aud }, keys);
       if (!result.ok && result.reason === 'unknown-kid') {
-        try {
-          await load(true);
-        } catch {
-          return { ok: false };
-        }
+        await load(true);
         result = verifyAccessJwt(token, { issuer, aud: config.aud }, keys);
       }
       if (!result.ok) return { ok: false };

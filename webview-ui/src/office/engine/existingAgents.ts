@@ -81,3 +81,18 @@ export function reconcileExistingAgents(
   }
   return addedDirectly;
 }
+
+/**
+ * Drop the tmux placement of every character a reconnect snapshot leaves out
+ * of its terminal map. The snapshot's own entries are stamped afterwards.
+ */
+export function clearMissingTerminals(
+  characters: Iterable<[number, { tmux?: unknown; sessionName?: string | null }]>,
+  terminals: Record<string, unknown>,
+): void {
+  for (const [id, ch] of characters) {
+    if (terminals[id] !== undefined) continue;
+    ch.tmux = null;
+    ch.sessionName = null;
+  }
+}

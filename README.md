@@ -117,7 +117,7 @@ To open the office on other devices, put it behind [Cloudflare Access](https://d
 | `PIXEL_AGENTS_ACCESS_TEAM_DOMAIN` | Your Access team domain, for example `myteam.cloudflareaccess.com`. |
 | `PIXEL_AGENTS_ACCESS_AUD`         | The audience (AUD) tag of the Access application.                   |
 
-With both set, the server checks the `Cf-Access-Jwt-Assertion` header on every request except hook posts. A request without a valid token gets `403`. The terminal panel opens only in this mode or with `--insecure-local-terminal`, and only for a page on the same origin. Without Access, the terminal also needs the server token.
+If only one of them is set, the server refuses to start and names the missing one, so a typo cannot leave the office open. With both set, it logs that the gate is on and checks the `Cf-Access-Jwt-Assertion` header on every request except hook posts. A request without a valid token gets `403`. The terminal panel opens only in this mode or with `--insecure-local-terminal`, and only for a page on the same origin. Without Access, the terminal also needs the server token.
 
 ## What tmux office adds to Pixel Agents
 

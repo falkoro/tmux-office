@@ -55,7 +55,8 @@ function optionalString(value: unknown): string | null {
 /**
  * Parse one session file. Returns null for malformed input; the caller skips
  * the file. Extra fields are ignored. `tmux` absent or JSON null means the
- * process is not inside tmux. A present but unparsable `tmux` drops the file.
+ * process is not inside tmux. A `tmux` that does not parse, for example a
+ * session name with a space, keeps the session without a location.
  */
 export function parseSessionFile(raw: string, configDir: string): LiveClaudeSession | null {
   let data: unknown;
@@ -71,13 +72,7 @@ export function parseSessionFile(raw: string, configDir: string): LiveClaudeSess
   if (typeof sessionId !== 'string' || sessionId.length === 0) return null;
   if (typeof cwd !== 'string' || cwd.length === 0) return null;
 
-  let tmux: TmuxLocation | null = null;
-  if (record.tmux !== undefined && record.tmux !== null) {
-    if (typeof record.tmux !== 'string') return null;
-    const parsed = parseTmuxLocation(record.tmux);
-    if (!parsed) return null;
-    tmux = parsed;
-  }
+  const tmux = typeof record.tmux === 'string' ? parseTmuxLocation(record.tmux) : null;
 
   return {
     pid,
