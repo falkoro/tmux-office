@@ -74,6 +74,24 @@ export function focusFromHash(rooms: readonly RoomModel[], hash: string | null):
   return rooms.some((r) => r.pods.some((p) => p.id === id)) ? { kind: 'pod', id } : null;
 }
 
+/** A deep link and what it names now. Only the user changes the link; the rooms only resolve it. */
+export class FocusLink {
+  hash: string | null;
+  focus: Focus | null = null;
+
+  constructor(hash: string | null) {
+    this.hash = hash;
+  }
+
+  /** Resolves the link against new rooms. True when the focus changed. */
+  resolve(rooms: readonly RoomModel[]): boolean {
+    const next = focusFromHash(rooms, this.hash);
+    const changed = next?.kind !== this.focus?.kind || next?.id !== this.focus?.id;
+    this.focus = next;
+    return changed;
+  }
+}
+
 export const roomDesks = (room: RoomModel): DeskModel[] => room.pods.flatMap((pod) => pod.desks);
 
 export const STATUS_TEXT: Record<DeskStatus, string> = {

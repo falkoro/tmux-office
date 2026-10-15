@@ -18,6 +18,7 @@ import {
   type Focus,
   focusFromHash,
   focusHash,
+  FocusLink,
   NO_PANE_POD_ID,
   roomDesks,
   roomHeat,
@@ -448,6 +449,29 @@ describe('focus hash', () => {
     for (const focus of targets) {
       assert.deepEqual(focusFromHash(office, focusHash(office, focus)), focus);
     }
+  });
+});
+
+describe('FocusLink', () => {
+  const office = (...sessions: string[]) =>
+    deriveOffice(
+      sessions.map((_, i) => char(i + 1)),
+      Object.fromEntries(
+        sessions.map((s, i) => [i + 1, { name: s, tmux: pane(s, '@1', `%${i + 1}`) }]),
+      ),
+      {},
+      cfg([{ name: 'work', patterns: ['work-*'] }]),
+    );
+
+  test('keeps a deep link while its session drops out for a poll', () => {
+    const link = new FocusLink('work-3');
+    assert.equal(link.resolve(office('work-1', 'work-3')), true);
+    assert.deepEqual(link.focus, { kind: 'pod', id: 'work-3' });
+    assert.equal(link.resolve(office('work-1')), true);
+    assert.equal(link.focus, null);
+    assert.equal(link.resolve(office('work-1', 'work-3')), true);
+    assert.deepEqual(link.focus, { kind: 'pod', id: 'work-3' });
+    assert.equal(link.hash, 'work-3');
   });
 });
 

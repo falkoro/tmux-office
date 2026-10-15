@@ -86,13 +86,13 @@ import type { DeskLight } from './effects.js';
 import { Effects } from './effects.js';
 import type { OfficeFurniture } from './furniture.js';
 import { buildOffice, radialTexture } from './furniture.js';
-import type { Bounds, DeskSpot, OfficePlan, PodSpot, RoomSpot } from './layout.js';
+import type { Bounds, DeskSpot, OfficePlan, RoomSpot } from './layout.js';
 import { fitKey, focusArea, planOffice } from './layout.js';
 import type { DeskModel, DeskStatus, Focus, HelperModel, PodModel, RoomModel } from './model.js';
 import {
   BACKGROUND_ROOM_ID,
-  focusFromHash,
   focusHash,
+  FocusLink,
   roomDesks,
   roomHeat,
   STATUS_TEXT,
@@ -670,7 +670,6 @@ export class OfficeScene {
   private readonly rooms = new Map<string, RoomView>();
   private readonly desks = new Map<number, DeskView>();
   private deskList: DeskView[] = [];
-  private readonly podIndex = new Map<string, PodSpot>();
   private readonly picks = new Map<string, CharacterKind>();
   private readonly ctx: Ctx;
   private readonly raycaster = new Raycaster();
@@ -681,8 +680,7 @@ export class OfficeScene {
   private plan: OfficePlan = planOffice([], 1);
   private planKey = '';
   private fitKey = '';
-  private focused: Focus | null = null;
-  private pendingHash: string | null;
+  private readonly link = new FocusLink(readHash());
   private userMoved = false;
   private tween: Tween | null = null;
   private readonly tweenTarget = new Vector3();
@@ -777,7 +775,6 @@ export class OfficeScene {
       this.requestRender();
     });
 
-    this.pendingHash = readHash();
     this.listen(renderer.domElement, 'pointerdown', this.onPointerDown);
     this.listen(renderer.domElement, 'pointerup', this.onPointerUp);
     this.listen(renderer.domElement, 'pointermove', this.onPointerMove);
@@ -795,6 +792,11 @@ export class OfficeScene {
   update(snapshot: OfficeSnapshot): void {
     if (this.disposed) return;
     this.snapshot = snapshot;
+    // The link stays when its target drops out, so focus comes back with it.
+    if (this.link.resolve(snapshot.rooms)) {
+      this.userMoved = false;
+      this.callbacks.onFocus(this.link.focus);
+    }
     const t = performance.now() / 1000;
     const deskIds = new Set(snapshot.rooms.flatMap((r) => roomDesks(r).map((d) => d.agentId)));
     for (const [id, desk] of this.desks) {
@@ -837,9 +839,6 @@ export class OfficeScene {
     this.layout();
     for (const desk of cheered) this.fx.burst(desk.seat(V2), desk.scale, t);
     this.syncEffects();
-    if (this.focused !== null && !this.focusable(this.focused)) this.focus(null);
-    const pending = focusFromHash(this.snapshot.rooms, this.pendingHash);
-    if (pending !== null) this.focus(pending);
     this.labelsDirty = true;
     this.requestRender();
   }
@@ -849,17 +848,18 @@ export class OfficeScene {
    * `null`. Mirrors the choice in the URL hash.
    */
   focus(target: Focus | null): void {
+    this.show(target && focusHash(this.snapshot.rooms, target));
+  }
+
+  private show(hash: string | null): void {
     if (this.disposed) return;
-    this.focused = target !== null && this.focusable(target) ? target : null;
-    this.pendingHash = null;
+    this.link.hash = hash;
+    this.link.resolve(this.snapshot.rooms);
     this.userMoved = false;
     const url = new URL(window.location.href);
-    url.hash =
-      this.focused === null
-        ? ''
-        : encodeURIComponent(focusHash(this.snapshot.rooms, this.focused)).replace(/%3A/g, ':');
+    url.hash = hash === null ? '' : encodeURIComponent(hash).replace(/%3A/g, ':');
     if (url.href !== window.location.href) window.history.replaceState(null, '', url);
-    this.callbacks.onFocus(this.focused);
+    this.callbacks.onFocus(this.link.focus);
     this.applyFocus(true);
   }
 
@@ -1016,10 +1016,8 @@ export class OfficeScene {
   private layout(): void {
     const animate = this.planKey !== '';
     this.plan = planOffice(this.snapshot.rooms, this.camera.aspect);
-    this.podIndex.clear();
     for (const spot of this.plan.rooms) {
       this.rooms.get(spot.id)?.place(spot);
-      for (const pod of spot.pods) if (!this.podIndex.has(pod.id)) this.podIndex.set(pod.id, pod);
       for (const d of spot.desks) this.desks.get(d.agentId)?.place(d);
     }
 
@@ -1060,18 +1058,14 @@ export class OfficeScene {
       );
     }
 
-    if (!this.userMoved && fitKey(this.plan, this.focused) !== this.fitKey) {
+    if (!this.userMoved && fitKey(this.plan, this.link.focus) !== this.fitKey) {
       this.applyFocus(animate);
     }
   }
 
-  private focusable(target: Focus): boolean {
-    return target.kind === 'room' ? this.rooms.has(target.id) : this.podIndex.has(target.id);
-  }
-
   private applyFocus(animate: boolean): void {
-    this.fitKey = fitKey(this.plan, this.focused);
-    const to = this.fitView(focusArea(this.plan, this.focused));
+    this.fitKey = fitKey(this.plan, this.link.focus);
+    const to = this.fitView(focusArea(this.plan, this.link.focus));
     if (!animate) {
       this.tween = null;
       this.setView(to.target, to.orbit);
@@ -1277,12 +1271,7 @@ export class OfficeScene {
     }
   };
 
-  private readonly onHashChange = (): void => {
-    const hash = readHash();
-    const target = focusFromHash(this.snapshot.rooms, hash);
-    if (hash === null || target !== null) this.focus(target);
-    else this.pendingHash = hash;
-  };
+  private readonly onHashChange = (): void => this.show(readHash());
 
   private readonly forwardWheel = (e: WheelEvent): void => {
     e.preventDefault();
