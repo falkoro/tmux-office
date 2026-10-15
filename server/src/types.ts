@@ -1,5 +1,7 @@
 import type * as vscode from 'vscode';
 
+import type { TmuxLocation } from './providers/hook/claude/claudeSessionRegistry.js';
+
 export interface AgentState {
   id: number;
   sessionId: string;
@@ -85,6 +87,11 @@ export interface AgentState {
   palette?: number;
   /** Hue shift in degrees (0-360). Rotates the base palette colors. */
   hueShift?: number;
+
+  /** Live tmux pane from the Claude session registry. Not persisted. */
+  tmux?: TmuxLocation | null;
+  /** `name` from the session registry. Not the teammate `agentName`. Not persisted. */
+  registryName?: string | null;
 }
 
 export interface PersistedAgent {

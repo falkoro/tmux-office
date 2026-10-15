@@ -1,8 +1,19 @@
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// getTeamMembers reads ~/.claude/teams. Keep that off the real home: this
+// suite must not write Claude config, and os.homedir() is not always writable.
+let homeOverride = '';
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  return { ...actual, homedir: () => homeOverride || actual.homedir() };
+});
 
 import { claudeTeamProvider } from '../src/providers/hook/claude/claudeTeamProvider.js';
+
+homeOverride = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-team-home-'));
 
 describe('claudeTeamProvider', () => {
   describe('identity', () => {
@@ -388,8 +399,7 @@ describe('claudeTeamProvider', () => {
   });
 
   describe('getTeamMembers', () => {
-    // Writes under ~/.claude/teams/<TEAM_NAME>/ and cleans up in afterEach.
-    const fs = require('fs') as typeof import('fs');
+    // Writes under <temp home>/.claude/teams/<TEAM_NAME>/ and cleans up in afterEach.
     const TEAM_NAME = 'test-team-' + Date.now();
 
     afterEach(() => {

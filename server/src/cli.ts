@@ -10,6 +10,8 @@
 
 import * as path from 'path';
 
+import { parseBackground, parseGlobs, parseRoomConfig } from '../../core/src/roomPatterns.js';
+import { type AccessVerifier, createAccessVerifier, type JwksDocument } from './accessJwt.js';
 import { AgentRuntime } from './agentRuntime.js';
 import { AgentStateStore } from './agentStateStore.js';
 import {
@@ -27,6 +29,8 @@ import {
 } from './configPersistence.js';
 import { MAX_PORT, MIN_PORT } from './constants.js';
 import { FileStateAdapter } from './fileStateAdapter.js';
+import { OfficeFeedState } from './officeFeed.js';
+import { ClaudeSessionRegistry } from './providers/hook/claude/claudeSessionRegistry.js';
 import { claudeProvider, copyHookScript, hookProviderById } from './providers/index.js';
 import { PixelAgentsServer } from './server.js';
 
@@ -37,6 +41,12 @@ export interface CliArgs {
    *  can run at once without a collision. --port picks a fixed one. */
   port?: number;
   host: string;
+  /** Force Watch All Sessions for this process, ignoring the persisted checkbox. */
+  watchAll: boolean;
+  /** Track a top-level agent only while its Claude process is in the session registry. */
+  liveOnly: boolean;
+  /** Dev/test only. Opens /ws/term without Cloudflare Access. */
+  insecureLocalTerminal: boolean;
 }
 
 /** Thrown by parseArgs on an invalid --port. Kept separate from process.exit so
@@ -45,7 +55,12 @@ export interface CliArgs {
 export class CliArgsError extends Error {}
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { host: '127.0.0.1' };
+  const args: CliArgs = {
+    host: '127.0.0.1',
+    watchAll: false,
+    liveOnly: false,
+    insecureLocalTerminal: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--port' || argv[i] === '-p') {
       const raw = argv[i + 1];
@@ -65,13 +80,22 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (argv[i] === '--host' && argv[i + 1]) {
       args.host = argv[i + 1];
       i++;
+    } else if (argv[i] === '--watch-all') {
+      args.watchAll = true;
+    } else if (argv[i] === '--live-only') {
+      args.liveOnly = true;
+    } else if (argv[i] === '--insecure-local-terminal') {
+      args.insecureLocalTerminal = true;
     } else if (argv[i] === '--help') {
       console.log(`Usage: pixel-agents [options]
 
 Options:
-  --port, -p <number>   Port to listen on (default: OS-assigned ephemeral port)
-  --host <string>       Host to bind to (default: 127.0.0.1)
-  --help                Show this help message`);
+  --port, -p <number>       Port to listen on (default: OS-assigned ephemeral port)
+  --host <string>           Host to bind to (default: 127.0.0.1)
+  --watch-all               Watch every Claude session, not only this workspace
+  --live-only               Track only Claude sessions with a running process
+  --insecure-local-terminal Allow /ws/term without Cloudflare Access (dev/tests only)
+  --help                    Show this help message`);
       process.exit(0);
     }
   }
@@ -95,6 +119,17 @@ Options:
  * Claude Code spawn a dead `node` process for every event, which is strictly
  * worse than no hooks at all.
  */
+function accessVerifierFromEnv(): AccessVerifier | undefined {
+  const team = process.env.PIXEL_AGENTS_ACCESS_TEAM_DOMAIN;
+  const aud = process.env.PIXEL_AGENTS_ACCESS_AUD;
+  if (!team || !aud) return undefined;
+  return createAccessVerifier({ teamDomain: team, aud }, async (url) => {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`access certs status ${response.status}`);
+    return (await response.json()) as JwksDocument;
+  });
+}
+
 function copyHookScriptOrReport(packageRoot: string, context = ''): boolean {
   if (copyHookScript(packageRoot)) return true;
   console.error(`[Pixel Agents] Hooks NOT installed${context}: hook script missing.`);
@@ -137,6 +172,7 @@ async function main(): Promise<void> {
   const store = new AgentStateStore();
   const adapter = new FileStateAdapter({ namespace: 'standalone' });
   store.setAdapter(adapter);
+  const officeFeed = new OfficeFeedState(store, claudeProvider);
 
   // ── Create server ──
   const server = new PixelAgentsServer();
@@ -227,6 +263,31 @@ async function main(): Promise<void> {
       console.log('[Pixel Agents] Assets reloaded (external directory change)');
     };
 
+    // Latch --watch-all before listen so the first webviewReady cannot reset
+    // it from the persisted checkbox.
+    runtime.forceWatchAll = args.watchAll;
+    runtime.liveOnly.current = args.liveOnly;
+    runtime.watchAllSessions.current =
+      args.watchAll || adapter.getSetting('pixel-agents.watchAllSessions', false);
+    if (args.insecureLocalTerminal) {
+      console.warn(
+        '[Pixel Agents] WARNING: --insecure-local-terminal is on. /ws/term accepts connections without Cloudflare Access. Do not expose this server.',
+      );
+    }
+    const rooms = parseRoomConfig(process.env.PIXEL_AGENTS_OFFICE_ROOMS);
+    const pinned = parseGlobs(process.env.PIXEL_AGENTS_OFFICE_PINNED);
+    const background = parseBackground(process.env.PIXEL_AGENTS_OFFICE_BACKGROUND);
+    if (rooms.length > 0 || pinned.length > 0 || !background) {
+      runtime.officeRooms = { type: 'officeRooms', rooms, pinned, background };
+      console.log(
+        `[Pixel Agents] Office rooms: ${
+          rooms.map((room) => `${room.name} (${room.patterns.join(', ')})`).join('; ') ||
+          'one per session'
+        }; pinned: ${pinned.join(', ') || 'none'}; background: ${background ? 'shown' : 'hidden'}`,
+      );
+    }
+
+    const sessionRegistry = new ClaudeSessionRegistry();
     const config = await server.start({
       store,
       runtime,
@@ -237,6 +298,13 @@ async function main(): Promise<void> {
       assetCache,
       onSetHooksEnabled,
       onReloadAssets,
+      insecureLocalTerminal: args.insecureLocalTerminal,
+      access: accessVerifierFromEnv(),
+      sessionRegistry,
+      officeFeed,
+      officeEmbedOrigins: (process.env.PIXEL_AGENTS_OFFICE_EMBED_ORIGINS ?? '')
+        .split(/[\s,]+/)
+        .filter(Boolean),
     });
     currentConfig = { port: config.port, token: config.token };
 
@@ -244,7 +312,8 @@ async function main(): Promise<void> {
     // runtime's single hooksEnabled ref follows the Claude provider until the
     // scanners grow per-provider awareness alongside the Settings UI.
     runtime.hooksEnabled.current = getHooksEnabled(claudeProvider.id);
-    runtime.watchAllSessions.current = adapter.getSetting('pixel-agents.watchAllSessions', false);
+    runtime.watchAllSessions.current =
+      runtime.forceWatchAll || adapter.getSetting('pixel-agents.watchAllSessions', false);
 
     // Install hooks on startup if the persisted setting says so — gated on the
     // one-time consent to modify ~/.claude/settings.json.
@@ -282,16 +351,19 @@ async function main(): Promise<void> {
       );
     }
 
-    // Start scanning for external sessions (Claude running in user's terminal)
+    // Start scanning for external sessions (Claude running in user's terminal).
+    // Every config dir that already has this workspace gets its own project scan.
     const cwd = process.cwd();
-    const dirs = claudeProvider.getSessionDirs?.(cwd);
-    if (dirs && dirs[0]) {
-      const projectDir = dirs[0];
+    const dirs = claudeProvider.getSessionDirs?.(cwd) ?? [];
+    for (const projectDir of dirs) {
       console.log(`[Pixel Agents] Scanning project dir: ${projectDir}`);
       runtime.startProjectScan(projectDir);
-      runtime.startExternalScanning(projectDir);
+    }
+    if (dirs.length > 0 || runtime.watchAllSessions.current) {
+      runtime.startExternalScanning(dirs[0] ?? cwd);
       runtime.startStaleCheck();
     }
+    runtime.startLiveSessionRegistry(sessionRegistry);
 
     // The URL the operator opens has to be REACHABLE (a wildcard bind address
     // is a bind target, not an address you can browse to — `--host 0.0.0.0`

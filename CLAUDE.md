@@ -645,5 +645,5 @@ Supporting: `wall-tile-editor.html` (wall sprite editing), `jsonl-viewer.html` (
 
 - Extension ID: `pablodelucca.pixel-agents` (VS Code Marketplace + Open VSX)
 - npm package: `pixel-agents` (CLI bin: `pixel-agents`)
-- GitHub: `https://github.com/pixel-agents-hq/pixel-agents`
+- GitHub: `https://github.com/falkoro/tmux-office`, built on `https://github.com/pixel-agents-hq/pixel-agents`
 - License: MIT

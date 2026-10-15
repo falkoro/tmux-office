@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { AgentRuntime } from '../src/agentRuntime.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
 import {
   type AssetCache,
@@ -324,6 +325,33 @@ describe('clientMessageHandler: areas + carpet wire ordering', () => {
 
       const mappings = sent[iAreaMappings] as { mappings?: Record<string, string[]> };
       expect(mappings.mappings).toEqual({ frontend: ['Engineering'] });
+    });
+
+    it('replays the office rooms to a new viewer before any agent', () => {
+      const officeRooms = {
+        type: 'officeRooms' as const,
+        rooms: [{ name: 'emperor', patterns: ['emperor-*'] }],
+        pinned: ['emperor-8'],
+        background: false,
+      };
+      const runtime = {
+        officeRooms,
+        forceWatchAll: false,
+        watchAllSessions: { current: false },
+        hooksEnabled: { current: false },
+        restoreExternalAgents: () => {},
+      } as unknown as AgentRuntime;
+
+      handleClientMessage({ type: 'webviewReady' }, (m) => sent.push(m), { ...ctx, runtime });
+
+      const types = sent.map((m) => m.type);
+      expect(sent[types.indexOf('officeRooms')]).toEqual(officeRooms);
+      expect(types.indexOf('officeRooms')).toBeLessThan(types.indexOf('existingAgents'));
+    });
+
+    it('sends no office rooms when none are configured', () => {
+      handleClientMessage({ type: 'webviewReady' }, (m) => sent.push(m), ctx);
+      expect(sent.map((m) => m.type)).not.toContain('officeRooms');
     });
 
     it('emits layoutLoaded after existingAgents so buffered agents materialize', () => {

@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import Fastify from 'fastify';
 
+import type { AccessVerifier } from './accessJwt.js';
 import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type {
@@ -19,6 +20,10 @@ import {
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
+import { agentCreatedTerminalFields } from './liveSessionSync.js';
+import type { OfficeFeedState } from './officeFeed.js';
+import type { ClaudeSessionRegistry } from './providers/hook/claude/claudeSessionRegistry.js';
+import { type AttachedTerminal, attachTmuxPane } from './tmuxTerminal.js';
 import type { AgentState } from './types.js';
 
 /** Options for creating the HTTP + WebSocket server. */
@@ -45,6 +50,16 @@ export interface HttpServerOptions {
   onSetHooksEnabled?: SetHooksEnabledSideEffect;
   /** Invoked when an external asset directory is added/removed. Standalone reloads + re-broadcasts assets here. */
   onReloadAssets?: ReloadAssetsSideEffect;
+  /** Dev/test only. Enables /ws/term without Cloudflare Access. */
+  insecureLocalTerminal?: boolean;
+  /** When set, every request except hook posts must carry a valid Access JWT. */
+  access?: AccessVerifier;
+  /** Live Claude sessions. /ws/term resolves an agent through this map. */
+  sessionRegistry?: ClaudeSessionRegistry;
+  /** Serves GET /api/office when set. */
+  officeFeed?: OfficeFeedState;
+  /** Browser origins allowed to read /api/office. A request without Origin is always allowed. */
+  officeEmbedOrigins?: readonly string[];
 }
 
 /** Result of createHttpServer(). */
@@ -84,9 +99,12 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
 
   // ── Routes ──────────────────────────────────────────────────
 
+  registerAccessGate(app, options);
   registerHealthRoute(app);
+  registerOfficeFeedRoute(app, options);
   registerHookRoute(app, options);
   registerWebSocketRoute(app, options);
+  registerTerminalRoute(app, options);
 
   // ── Listen ──────────────────────────────────────────────────
 
@@ -107,6 +125,21 @@ function registerHealthRoute(app: FastifyInstance): void {
   }));
 }
 
+// ── Office feed ─────────────────────────────────────────────────
+
+function registerOfficeFeedRoute(app: FastifyInstance, options: HttpServerOptions): void {
+  const feed = options.officeFeed;
+  if (!feed) return;
+  const origins = new Set(options.officeEmbedOrigins ?? []);
+  app.get('/api/office', async (request, reply) => {
+    const origin = request.headers.origin;
+    if (origin !== undefined && !origins.has(origin)) {
+      return reply.code(403).send({ error: 'origin not allowed' });
+    }
+    return feed.snapshot(options.runtime?.officeRooms ?? null);
+  });
+}
+
 // ── Hook Events ────────────────────────────────────────────────
 
 function registerHookRoute(app: FastifyInstance, options: HttpServerOptions): void {
@@ -116,6 +149,7 @@ function registerHookRoute(app: FastifyInstance, options: HttpServerOptions): vo
   }>(
     `${HOOK_API_PREFIX}/:providerId`,
     {
+      config: { accessExempt: true },
       preHandler: bearerAuth(options.token),
       schema: {
         params: {
@@ -182,6 +216,7 @@ function registerWebSocketRoute(app: FastifyInstance, options: HttpServerOptions
         hooksOnly: agent.hooksOnly || undefined,
         palette: agent.palette,
         hueShift: agent.hueShift,
+        ...agentCreatedTerminalFields(agent),
       });
     };
 
@@ -320,6 +355,139 @@ function bearerAuth(expectedToken: string) {
 }
 
 // ── Utilities ──────────────────────────────────────────────────
+
+const accessEmails = new WeakMap<FastifyRequest, string | null>();
+
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function logEmail(email: string | null | undefined): string {
+  const value = email && email.length > 0 ? email : '-';
+  return value.replace(/[\r\n]/g, '').slice(0, 200);
+}
+
+function toBuffer(data: unknown): Buffer {
+  if (Buffer.isBuffer(data)) return data;
+  if (data instanceof ArrayBuffer) return Buffer.from(data);
+  if (Array.isArray(data)) {
+    const parts = data.filter((part): part is Buffer => Buffer.isBuffer(part));
+    return Buffer.concat(parts);
+  }
+  return Buffer.alloc(0);
+}
+
+/**
+ * Access JWT, when configured, runs before the WebSocket upgrade on every
+ * route. Only the hook post route opts out (it keeps its bearer check). The
+ * opt-out is read from the matched route, never from the raw URL, so an
+ * encoded or reshaped path cannot reach a route while skipping its gate.
+ */
+function registerAccessGate(app: FastifyInstance, options: HttpServerOptions): void {
+  const { access } = options;
+  if (!access) return;
+  app.addHook('onRequest', async (request, reply) => {
+    const config = request.routeOptions.config as { accessExempt?: boolean } | undefined;
+    if (config?.accessExempt === true) return;
+    const result = await access.verify(headerValue(request.headers['cf-access-jwt-assertion']));
+    if (!result.ok) {
+      await reply.code(403).send('forbidden');
+      return;
+    }
+    accessEmails.set(request, result.email);
+  });
+}
+
+/**
+ * /ws/term stays closed unless Access is configured or the insecure local
+ * flag is on. Typing into a pane is privileged: same-origin always, and with
+ * Access off the server token too, so a page on another site cannot drive a
+ * terminal. Runs as a route hook, so it guards every path the router maps here.
+ */
+function terminalGate(options: HttpServerOptions) {
+  const terminalEnabled = options.insecureLocalTerminal === true || options.access !== undefined;
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    if (
+      !terminalEnabled ||
+      !isAllowedWebSocketOrigin(request.headers.origin, request.headers.host) ||
+      (!options.access && !standaloneTokenValid(request.url, options.token))
+    ) {
+      await reply.code(403).send('forbidden');
+      return;
+    }
+    if (terminalAgentId(request.url) === null) {
+      await reply.code(400).send('bad agent');
+    }
+  };
+}
+
+function terminalAgentId(url: string): number | null {
+  try {
+    const raw = new URL(url, 'http://localhost').searchParams.get('agentId') ?? '';
+    return /^\d+$/.test(raw) ? Number(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions): void {
+  app.get('/ws/term', { websocket: true, onRequest: terminalGate(options) }, (socket, request) => {
+    const agentId = terminalAgentId(request.url);
+    const agent = agentId === null ? undefined : options.store.get(agentId);
+    const location = agent ? options.sessionRegistry?.get(agent.sessionId)?.tmux : undefined;
+    if (!agent || !location) {
+      safeSend(socket, { type: 'error', message: 'no terminal for this agent' });
+      socket.close();
+      return;
+    }
+
+    const email = logEmail(accessEmails.get(request));
+    const pane = `${location.session}:${location.windowId}.${location.paneId}`;
+    console.log(`[term] attach email=${email} pane=${pane}`);
+
+    let stopped = false;
+    let attached: AttachedTerminal | null = null;
+    const detach = (): void => {
+      if (stopped) return;
+      stopped = true;
+      console.log(`[term] detach email=${email} pane=${pane}`);
+      attached?.stop();
+    };
+    socket.on('close', detach);
+    socket.on('error', detach);
+
+    void attachTmuxPane(
+      location,
+      (data) => {
+        if (socket.readyState === 1) socket.send(Buffer.from(data, 'utf8'));
+      },
+      (cols, rows) => {
+        safeSend(socket, { type: 'size', cols, rows });
+      },
+    )
+      .then((term) => {
+        if (stopped) {
+          term.stop();
+          return;
+        }
+        attached = term;
+        socket.on('message', (data: unknown, isBinary: boolean) => {
+          if (!isBinary || stopped) return;
+          const bytes = toBuffer(data);
+          if (bytes.length === 0) return;
+          term.pty.write(bytes);
+        });
+      })
+      .catch((err: unknown) => {
+        console.error(
+          `[term] attach failed: ${err instanceof Error ? err.message : 'unknown error'}`,
+        );
+        if (stopped) return;
+        safeSend(socket, { type: 'error', message: 'could not attach' });
+        socket.close();
+      });
+  });
+}
 
 function safeSend(
   socket: { send: (data: string) => void; readyState: number },

@@ -191,6 +191,26 @@ describe('resendAgentActivity', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('replays a pending permission wait after the tool it marks', () => {
+    const store = new AgentStateStore();
+    store.set(
+      1,
+      createTestAgent({
+        id: 1,
+        permissionSent: true,
+        activeToolStatuses: new Map([['tool-1', 'Running: git push']]),
+        activeToolNames: new Map([['tool-1', 'Bash']]),
+      }),
+    );
+    store.set(2, createTestAgent({ id: 2 }));
+    const sent: Array<Record<string, unknown>> = [];
+    resendAgentActivity((msg) => sent.push(msg), store);
+    expect(sent.map((m) => `${m.type}#${m.id}`)).toEqual([
+      'agentToolStart#1',
+      'agentToolPermission#1',
+    ]);
+  });
+
   it('sends context usage only when agent has tokens', () => {
     let store = new AgentStateStore();
     store.set(1, createTestAgent({ id: 1, contextTokens: 50_000, maxContextTokens: 200_000 }));

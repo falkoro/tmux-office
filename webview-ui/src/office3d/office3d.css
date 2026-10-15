@@ -1,0 +1,582 @@
+/* Status colours (--o3d-working, ...) arrive as inline custom properties from
+   OFFICE3D_STATUS_COLORS so the scene and the labels share one palette. */
+.o3d-root {
+  --o3d-sans: 'Adwaita Sans', 'Inter', 'Liberation Sans', 'Helvetica Neue', Arial, sans-serif;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--color-bg-dark);
+}
+
+.o3d-host {
+  position: absolute;
+  inset: 0;
+}
+
+.o3d-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  touch-action: none;
+  outline: none;
+}
+
+.o3d-labels {
+  --o3d-ppm: 40;
+  position: absolute;
+  inset: 0;
+  /* CSS2DRenderer depth-sorts labels with z-index; keep that inside this layer
+     so off-screen labels never paint over the room bar. */
+  z-index: 0;
+  pointer-events: none;
+}
+
+.o3d-labels button,
+.o3d-labels select {
+  pointer-events: auto;
+  margin: 0;
+  border-radius: 0;
+  cursor: pointer;
+}
+
+.o3d-labels button:focus-visible,
+.o3d-bar-btn:focus-visible {
+  outline: 2px solid var(--color-accent-bright);
+  outline-offset: 2px;
+}
+
+/* ── Desk labels ───────────────────────────────────────────── */
+.o3d-desk,
+.o3d-desk *,
+.o3d-chip,
+.o3d-pod,
+.o3d-pod *,
+.o3d-badge {
+  font-family: var(--o3d-sans);
+}
+
+.o3d-desk {
+  --o3d-status: var(--o3d-idle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  /* A shrunken background desk would otherwise break its name every two letters. */
+  max-inline-size: max(8em, calc(var(--o3d-ppm) * 2.3px));
+  padding: 3px 8px 4px;
+  font-size: clamp(12px, calc(var(--o3d-ppm) * 0.2px), 16px);
+  line-height: 1.2;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 2px solid var(--o3d-status);
+  box-shadow: var(--shadow-pixel);
+}
+
+.o3d-desk[data-status='working'] {
+  --o3d-status: var(--o3d-working);
+}
+.o3d-desk[data-status='waiting-input'] {
+  --o3d-status: var(--o3d-waiting-input);
+}
+.o3d-desk[data-status='done'] {
+  --o3d-status: var(--o3d-done);
+}
+.o3d-desk[data-status='idle'] {
+  opacity: 0.7;
+}
+.o3d-desk[data-status='needs-permission'] {
+  --o3d-status: var(--o3d-needs-permission);
+  color: var(--color-bg-dark);
+  background: var(--o3d-needs-permission);
+}
+.o3d-desk[data-status='needs-permission'] .o3d-dot {
+  background: var(--color-bg-dark);
+}
+.o3d-desk[data-status='needs-permission'] .o3d-desk-status,
+.o3d-desk[data-status='needs-permission'] .o3d-desk-crew {
+  color: var(--color-bg-dark);
+  font-weight: 700;
+}
+.o3d-desk[data-status='needs-permission']::after,
+.o3d-room[data-heat='needs-permission']::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 3px solid var(--o3d-needs-permission);
+  pointer-events: none;
+  animation: o3d-pulse 1.1s ease-out infinite;
+}
+.o3d-desk[data-selected='true'] {
+  outline: 2px solid var(--color-text);
+  outline-offset: 3px;
+}
+
+.o3d-desk-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  max-inline-size: 100%;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+}
+
+/* The character picker: shown when a desk is close enough to read, or selected. */
+.o3d-pick {
+  display: none;
+  max-inline-size: 100%;
+  margin-block-start: 3px;
+  padding: 0 2px;
+  font-size: 0.8em;
+  color: var(--color-text);
+  background: var(--color-bg-dark);
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  cursor: pointer;
+}
+.o3d-labels[data-density='full'] .o3d-pick,
+.o3d-desk[data-selected='true'] .o3d-pick {
+  display: block;
+}
+
+.o3d-desk-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-inline-size: 0;
+  max-inline-size: 100%;
+}
+
+.o3d-dot {
+  flex: none;
+  inline-size: 0.6em;
+  block-size: 0.6em;
+  background: var(--o3d-status);
+}
+
+.o3d-desk-name {
+  min-inline-size: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.o3d-desk-crew {
+  flex: none;
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+}
+
+.o3d-desk-status {
+  max-inline-size: 100%;
+  overflow: hidden;
+  font-size: 0.9em;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--color-text-muted);
+}
+
+.o3d-labels[data-density='compact'] .o3d-desk {
+  padding: 2px 4px 3px;
+  font-size: 11px;
+  line-height: 1.1;
+}
+.o3d-labels[data-density='compact'] .o3d-desk-status {
+  display: none;
+}
+.o3d-labels[data-density='roster'] .o3d-desk {
+  display: none;
+}
+
+/* Background desks are smaller: name only. */
+.o3d-desk[data-background='true'] {
+  padding: 1px 5px 2px;
+  font-size: 12px;
+}
+.o3d-desk[data-background='true'] .o3d-desk-status {
+  display: none;
+}
+
+/* ── Status badges over the characters ─────────────────────── */
+.o3d-badge {
+  --o3d-status: var(--o3d-idle);
+  z-index: 2147482000 !important;
+  display: grid;
+  place-items: center;
+  min-inline-size: 1.5em;
+  block-size: 1.5em;
+  font-size: clamp(12px, calc(var(--o3d-ppm) * 0.32px), 24px);
+  font-weight: 800;
+  line-height: 1;
+  color: var(--color-bg-dark);
+  background: var(--o3d-status);
+  border: 2px solid var(--color-bg-dark);
+  box-shadow: var(--shadow-pixel);
+  pointer-events: none;
+}
+.o3d-badge-small {
+  font-size: clamp(10px, calc(var(--o3d-ppm) * 0.22px), 16px);
+}
+/* CSS2DRenderer owns `transform`. The separate rotate and scale properties would act on its
+   translation too, so every badge motion is a plain translate. */
+.o3d-badge[data-status='needs-permission'] {
+  --o3d-status: var(--o3d-needs-permission);
+  animation: o3d-bob 0.8s ease-in-out infinite alternate;
+}
+.o3d-badge[data-status='waiting-input'] {
+  --o3d-status: var(--o3d-waiting-input);
+  animation: o3d-sway 1.6s ease-in-out infinite alternate;
+}
+.o3d-badge[data-status='done'] {
+  --o3d-status: var(--o3d-done);
+  animation: o3d-pop 0.5s ease-out;
+}
+.o3d-badge[data-status='idle'] {
+  font-size: clamp(11px, calc(var(--o3d-ppm) * 0.26px), 18px);
+  font-style: italic;
+  color: var(--color-text-muted);
+  background: none;
+  border: 0;
+  box-shadow: none;
+  animation: o3d-drift 3.2s ease-in-out infinite;
+}
+.o3d-labels[data-density='roster'] .o3d-badge:is([data-status='idle'], [data-status='done']) {
+  display: none;
+}
+
+/* ── Pod signs ─────────────────────────────────────────────── */
+/* A pod is one tmux session, so its sign is the pod's headline and draws above the
+   desk labels and the badges. A standing alert in the row in front reaches into the
+   sign; its desk label still says so in the status colour. CSS2DRenderer writes z-index inline. */
+.o3d-pod {
+  z-index: 2147483000 !important;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 10px 3px;
+  font-size: clamp(16px, calc(var(--o3d-ppm) * 0.42px), 26px);
+  font-weight: 700;
+  line-height: 1.1;
+  white-space: nowrap;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  box-shadow: var(--shadow-pixel);
+}
+.o3d-pod:hover {
+  background: var(--color-btn-hover);
+}
+.o3d-pod[data-pinned='true'] {
+  background: var(--color-active-bg);
+  border-color: var(--color-accent-bright);
+}
+.o3d-pod[data-heat='waiting-input'] {
+  border-color: var(--o3d-waiting-input);
+}
+.o3d-pod[data-heat='needs-permission'] {
+  border-color: var(--o3d-needs-permission);
+}
+.o3d-pod-kind {
+  font-size: 0.55em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+.o3d-labels[data-density='roster'] .o3d-pod {
+  padding: 0 4px;
+  font-size: 11px;
+  border-width: 1px;
+}
+.o3d-labels[data-density='roster'] .o3d-pod-kind {
+  display: none;
+}
+
+/* ── Room roster (desks too small for their own labels) ───── */
+.o3d-roster {
+  display: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  max-inline-size: calc(var(--o3d-ppm) * var(--o3d-room-w, 6) * 1px);
+}
+.o3d-labels[data-density='roster'] .o3d-roster {
+  display: flex;
+}
+/* On a narrow viewport the list sits in floor planOffice reserves in front of the pods,
+   OFFICE3D_NARROW_ROSTER_COLUMNS names per line. */
+@media (max-aspect-ratio: 4/5) {
+  .o3d-labels[data-density='roster'] .o3d-roster {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+/* On a wide viewport the background strip is wide and shallow, so its list wraps across it.
+   4/5 is OFFICE3D_NARROW_ASPECT: planOffice reserves floor for the same number of lines. */
+@media (min-aspect-ratio: 4/5) {
+  .o3d-labels[data-density='roster'] .o3d-roster[data-background='true'] {
+    flex-flow: row wrap;
+    justify-content: center;
+  }
+  .o3d-roster[data-background='true'] .o3d-roster-item {
+    max-inline-size: 11em;
+  }
+}
+
+.o3d-roster-item {
+  --o3d-status: var(--o3d-idle);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-inline-size: 0;
+  padding: 2px 5px 2px 4px;
+  font-size: clamp(11px, calc(var(--o3d-ppm) * 0.45px), 13px);
+  line-height: 1.25;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 0;
+  border-inline-start: 3px solid var(--o3d-status);
+  box-shadow: var(--shadow-pixel);
+}
+.o3d-roster-item,
+.o3d-roster-item * {
+  font-family: var(--o3d-sans);
+}
+.o3d-roster-item[data-status='working'] {
+  --o3d-status: var(--o3d-working);
+}
+.o3d-roster-item[data-status='waiting-input'] {
+  --o3d-status: var(--o3d-waiting-input);
+}
+.o3d-roster-item[data-status='done'] {
+  --o3d-status: var(--o3d-done);
+}
+.o3d-roster-item[data-status='idle'] {
+  color: var(--color-text-muted);
+}
+.o3d-roster-item[data-status='needs-permission'] {
+  --o3d-status: var(--o3d-needs-permission);
+  color: var(--color-bg-dark);
+  font-weight: 700;
+  background: var(--o3d-needs-permission);
+}
+.o3d-roster-item[data-status='needs-permission'] .o3d-dot {
+  background: var(--color-bg-dark);
+}
+
+.o3d-roster-name {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ── Room labels ───────────────────────────────────────────── */
+.o3d-room {
+  /* The room's banner outranks the pod signs, which hang into the gap in front of it. */
+  z-index: 2147483100 !important;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px 10px;
+  max-inline-size: calc(var(--o3d-ppm) * 6px);
+  padding: 4px 10px;
+  font-size: clamp(16px, calc(var(--o3d-ppm) * 0.34px), 30px);
+  line-height: 1.1;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 2px solid var(--color-border);
+  box-shadow: var(--shadow-pixel);
+}
+.o3d-room:hover {
+  background: var(--color-btn-hover);
+}
+.o3d-room[data-pinned='true'] {
+  background: var(--color-active-bg);
+  border-color: var(--color-accent-bright);
+}
+.o3d-room[data-heat='waiting-input'] {
+  border-color: var(--o3d-waiting-input);
+}
+.o3d-room[data-heat='needs-permission'] {
+  border-color: var(--o3d-needs-permission);
+}
+
+.o3d-room-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  max-inline-size: 100%;
+}
+.o3d-room[data-pinned='true'] .o3d-room-title::before,
+.o3d-pod[data-pinned='true'] .o3d-pod-name::before,
+.o3d-bar-btn[data-pinned='true']::before {
+  content: '';
+  display: inline-block;
+  inline-size: 0.45em;
+  block-size: 0.45em;
+  margin-inline-end: 0.35em;
+  vertical-align: 0.12em;
+  background: var(--color-accent-bright);
+  transform: rotate(45deg);
+}
+
+.o3d-room-chips {
+  display: flex;
+  gap: 4px;
+}
+
+.o3d-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 4px;
+  font-size: 0.55em;
+  font-weight: 700;
+  color: var(--color-text);
+  background: var(--color-bg-dark);
+}
+.o3d-chip::before {
+  content: '';
+  inline-size: 0.7em;
+  block-size: 0.7em;
+  background: var(--o3d-chip, var(--o3d-idle));
+}
+.o3d-chip[data-status='working'] {
+  --o3d-chip: var(--o3d-working);
+}
+.o3d-chip[data-status='needs-permission'] {
+  --o3d-chip: var(--o3d-needs-permission);
+}
+.o3d-chip[data-status='waiting-input'] {
+  --o3d-chip: var(--o3d-waiting-input);
+}
+.o3d-chip[data-status='done'] {
+  --o3d-chip: var(--o3d-done);
+}
+
+/* ── Room bar ──────────────────────────────────────────────── */
+.o3d-bar {
+  position: absolute;
+  inset-block-start: 8px;
+  inset-inline: 8px;
+  z-index: 1;
+  display: flex;
+  gap: 6px;
+  padding-block-end: 4px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  pointer-events: none;
+}
+
+.o3d-bar-btn {
+  position: relative;
+  flex: none;
+  padding: 3px 10px 4px;
+  font-size: 18px;
+  color: var(--color-text);
+  background: var(--color-btn-bg);
+  border: 2px solid transparent;
+  border-radius: 0;
+  box-shadow: var(--shadow-pixel);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.o3d-bar-btn[aria-pressed='true'] {
+  background: var(--color-active-bg);
+  border-color: var(--color-accent);
+}
+.o3d-bar-btn[data-heat='needs-permission'] {
+  border-block-end-color: var(--o3d-needs-permission);
+}
+.o3d-bar-btn[data-heat='waiting-input'] {
+  border-block-end-color: var(--o3d-waiting-input);
+}
+
+.o3d-bar-pod {
+  font-size: 15px;
+}
+
+.o3d-bar-sep {
+  flex: none;
+  inline-size: 2px;
+  margin-inline: 2px;
+  background: var(--color-border);
+}
+
+.o3d-stats {
+  position: absolute;
+  inset-block-start: 48px;
+  inset-inline-end: 8px;
+  z-index: 2;
+  padding: 2px 6px;
+  font:
+    12px/1.3 ui-monospace,
+    monospace;
+  color: var(--color-text);
+  background: var(--color-bg-dark);
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .o3d-bar-btn:hover {
+    background: var(--color-btn-hover);
+  }
+}
+
+@keyframes o3d-pulse {
+  from {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.25, 1.6);
+  }
+}
+
+@keyframes o3d-bob {
+  to {
+    translate: 0 -5px;
+  }
+}
+
+@keyframes o3d-sway {
+  from {
+    translate: -4px 0;
+  }
+  to {
+    translate: 4px 0;
+  }
+}
+
+@keyframes o3d-pop {
+  from {
+    translate: 0 -12px;
+    opacity: 0;
+  }
+}
+
+@keyframes o3d-drift {
+  0%,
+  100% {
+    translate: 0 0;
+    opacity: 0.5;
+  }
+  50% {
+    translate: 3px -6px;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .o3d-desk::after,
+  .o3d-room::after,
+  .o3d-badge {
+    animation: none;
+  }
+}

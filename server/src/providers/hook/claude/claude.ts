@@ -1,13 +1,12 @@
-import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
-import { normalizeProjectPath } from '../../../../../core/src/normalizeProjectPath.js';
 import type { AgentEvent, HookProvider } from '../../../../../core/src/provider.js';
 import {
   BASH_COMMAND_DISPLAY_MAX_LENGTH,
   TASK_DESCRIPTION_DISPLAY_MAX_LENGTH,
 } from '../../../constants.js';
+import { allSessionRoots, sessionDirsForWorkspace } from './claudeConfigDirs.js';
 import {
   areHooksInstalled as installerAreHooksInstalled,
   installHooks as installerInstallHooks,
@@ -75,28 +74,9 @@ export function formatToolStatus(toolName: string, input?: unknown): string {
 // ── Session dir + launch command ──
 
 function getSessionDirs(workspacePath: string): string[] {
-  // Claude stores sessions at ~/.claude/projects/<workspace-path-with-dashes>/.
-  const dirName = normalizeProjectPath(workspacePath);
-  const projectDir = path.join(os.homedir(), '.claude', 'projects', dirName);
-
-  // Try exact match first.
-  if (fs.existsSync(projectDir)) return [projectDir];
-
-  // Case-insensitive fallback for Windows: drive letter casing can differ
-  // between what VS Code gives us (e.g. "c:\...") and Claude's encoding ("C:\...").
-  const projectsRoot = path.join(os.homedir(), '.claude', 'projects');
-  try {
-    if (fs.existsSync(projectsRoot)) {
-      const lowerDirName = dirName.toLowerCase();
-      const match = fs.readdirSync(projectsRoot).find((c) => c.toLowerCase() === lowerDirName);
-      if (match) return [path.join(projectsRoot, match)];
-    }
-  } catch {
-    /* ignore scan errors */
-  }
-
-  // Return the expected path even if it doesn't exist yet (caller tolerates missing dirs).
-  return [projectDir];
+  // One transcript directory per Claude config dir (~/.claude, ~/.claude-work, …).
+  // The canonical ~/.claude path stays first so a launch still anchors there.
+  return sessionDirsForWorkspace(os.homedir(), workspacePath);
 }
 
 function buildLaunchCommand(
@@ -112,7 +92,7 @@ function buildLaunchCommand(
 /** Root that holds every Claude session across all workspaces. Used by the
  *  global session scanner ("Watch All Sessions"). */
 function getAllSessionRoots(): string[] {
-  return [path.join(os.homedir(), '.claude', 'projects')];
+  return allSessionRoots(os.homedir());
 }
 
 // ── normalizeHookEvent: the single Claude-specific normalization boundary ──
@@ -307,6 +287,7 @@ export const claudeProvider: HookProvider = {
   permissionExemptTools: new Set(['Task', 'Agent', 'AskUserQuestion']),
   subagentToolNames: new Set(['Task', 'Agent']),
   readingTools: new Set(['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch']),
+  questionTools: new Set(['AskUserQuestion']),
   terminalNamePrefix: CLAUDE_TERMINAL_NAME_PREFIX,
   contextWindowForModel,
 

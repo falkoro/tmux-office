@@ -14,6 +14,7 @@ import {
   startFileWatching,
 } from '../../server/src/fileWatcher.js';
 import { loadLayout } from '../../server/src/layoutPersistence.js';
+import { agentTerminalMap } from '../../server/src/liveSessionSync.js';
 import { assignPaletteIfNeeded } from '../../server/src/paletteAssigner.js';
 import { CLAUDE_TERMINAL_NAME_PREFIX } from '../../server/src/providers/hook/claude/constants.js';
 import { claudeProvider } from '../../server/src/providers/index.js';
@@ -552,12 +553,14 @@ export function sendExistingAgents(
     `[Pixel Agents] sendExistingAgents: agents=${JSON.stringify(agentIds)}, meta=${JSON.stringify(agentMeta)}`,
   );
 
+  const agentTerminals = agentTerminalMap(agents);
   webview.postMessage({
     type: 'existingAgents',
     agents: agentIds,
     agentMeta,
     folderNames,
     externalAgents,
+    ...(Object.keys(agentTerminals).length > 0 ? { agentTerminals } : {}),
   });
   // Note: sendCurrentAgentStatuses is called separately AFTER layoutLoaded
   // so that agentStatus/agentToolStart messages arrive after characters are created.

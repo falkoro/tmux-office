@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { HooksConsentRequest } from '../../../core/src/messages.js';
+import type { HooksConsentRequest, OfficeRooms } from '../../../core/src/messages.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
 import { reconcileExistingAgents } from '../office/engine/existingAgents.js';
@@ -14,6 +14,7 @@ import { setPetTemplates } from '../office/sprites/petSpriteData.js';
 import { setCharacterTemplates } from '../office/sprites/spriteData.js';
 import {
   extractToolName,
+  isQuestionToolName,
   isSubagentToolName,
   setProviderCapabilities,
 } from '../office/toolUtils.js';
@@ -38,6 +39,21 @@ export interface SubagentCharacter {
   parentAgentId: number;
   parentToolId: string;
   label: string;
+}
+
+export interface AgentTerminalMeta {
+  name: string | null;
+  tmux: { session: string; windowId: string; paneId: string } | null;
+}
+
+function isTmuxLocation(value: unknown): value is NonNullable<AgentTerminalMeta['tmux']> {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.session === 'string' &&
+    typeof record.windowId === 'string' &&
+    typeof record.paneId === 'string'
+  );
 }
 
 interface FurnitureAsset {
@@ -100,6 +116,10 @@ interface ExtensionMessageState {
    *  pending install from a failed one, per provider — A's status is never a verdict on B's install. */
   hooksStatusSeq: Record<string, number>;
   hooksInfoShown: boolean;
+  /** Live tmux metadata keyed by agent id. A null tmux closes the terminal panel. */
+  agentTerminals: Record<number, AgentTerminalMeta>;
+  /** Configured office rooms; null when the server has none. */
+  officeRooms: OfficeRooms | null;
   /** First-run consent ask (hooksConsentRequest). Non-null while the server waits on an answer; carries the provider
    *  and the server's exact disclosure copy, so the consent step renders the terms being approved with no client
    *  duplicate to drift. Cleared on answer/dismissal, and by a matching provider's hooksStatus installed=true. */
@@ -153,6 +173,9 @@ export function useExtensionMessages(
   const consentRequest = consentQueue[0] ?? null;
   const [areaMappings, setAreaMappings] = useState<Record<string, string[]>>({});
   const [showAreas, setShowAreas] = useState(false);
+  const [agentTerminals, setAgentTerminals] = useState<Record<number, AgentTerminalMeta>>({});
+  const terminalsRef = useRef<Record<number, AgentTerminalMeta>>({});
+  const [officeRooms, setOfficeRooms] = useState<OfficeRooms | null>(null);
 
   // The renderer keeps its own module-level copy (read every rAF frame), so both
   // sources of truth move together — the persisted value on settingsLoaded and
@@ -183,6 +206,24 @@ export function useExtensionMessages(
       setAgentFolderNames((prev) => (prev.includes(name) ? prev : [...prev, name]));
     };
 
+    const applyTerminal = (id: number, info: AgentTerminalMeta): void => {
+      terminalsRef.current = { ...terminalsRef.current, [id]: info };
+      setAgentTerminals(terminalsRef.current);
+      const ch = getOfficeState().characters.get(id);
+      if (!ch) return;
+      ch.sessionName = info.name;
+      ch.tmux = info.tmux;
+    };
+
+    const stampTerminal = (id: number): void => {
+      const info = terminalsRef.current[id];
+      if (!info) return;
+      const ch = getOfficeState().characters.get(id);
+      if (!ch) return;
+      ch.sessionName = info.name;
+      ch.tmux = info.tmux;
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handler = (msg: any) => {
       const os = getOfficeState();
@@ -211,7 +252,13 @@ export function useExtensionMessages(
         setProviderCapabilities({
           readingTools: msg.readingTools,
           subagentToolNames: msg.subagentToolNames,
+          questionTools: msg.questionTools,
         });
+        return;
+      }
+
+      if (msg.type === 'officeRooms') {
+        setOfficeRooms(msg);
         return;
       }
 
@@ -234,6 +281,7 @@ export function useExtensionMessages(
         for (const p of pendingAgents) {
           os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, p.folderName);
           if (p.isHeadless) os.setHeadless(p.id, true);
+          stampTerminal(p.id);
         }
         pendingAgents = [];
         layoutReadyRef.current = true;
@@ -289,6 +337,12 @@ export function useExtensionMessages(
             os.setHeadless(id, true);
           }
         }
+        if (typeof msg.name === 'string' || msg.tmux != null) {
+          applyTerminal(id, {
+            name: typeof msg.name === 'string' ? msg.name : null,
+            tmux: isTmuxLocation(msg.tmux) ? msg.tmux : null,
+          });
+        }
         saveAgentSeats(os);
       } else if (msg.type === 'agentClosed') {
         const id = msg.id as number;
@@ -317,6 +371,18 @@ export function useExtensionMessages(
         os.removeAllSubagents(id);
         setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
         os.removeAgent(id);
+        if (id in terminalsRef.current) {
+          const next = { ...terminalsRef.current };
+          delete next[id];
+          terminalsRef.current = next;
+          setAgentTerminals(next);
+        }
+      } else if (msg.type === 'agentTerminal') {
+        const id = msg.id as number;
+        applyTerminal(id, {
+          name: typeof msg.name === 'string' ? msg.name : null,
+          tmux: isTmuxLocation(msg.tmux) ? msg.tmux : null,
+        });
       } else if (msg.type === 'existingAgents') {
         const incoming = msg.agents as number[];
         const meta = (msg.agentMeta || {}) as Record<number, ExistingAgentMeta>;
@@ -354,11 +420,25 @@ export function useExtensionMessages(
           }
           return merged.sort((a, b) => a - b);
         });
+        const incomingTerminals = msg.agentTerminals as
+          Record<string, { name?: string | null; tmux?: unknown }> | undefined;
+        if (incomingTerminals) {
+          for (const [rawId, info] of Object.entries(incomingTerminals)) {
+            const id = Number(rawId);
+            if (!Number.isInteger(id)) continue;
+            applyTerminal(id, {
+              name: typeof info?.name === 'string' ? info.name : null,
+              tmux: isTmuxLocation(info?.tmux) ? info.tmux : null,
+            });
+          }
+        }
       } else if (msg.type === 'agentToolStart') {
         const id = msg.id as number;
         const toolId = msg.toolId as string;
         const status = msg.status as string;
         const permissionActive = msg.permissionActive as boolean | undefined;
+        const toolName = (msg.toolName as string | undefined) ?? extractToolName(status);
+        const question = isQuestionToolName(toolName);
         setAgentTools((prev) => {
           const list = prev[id] || [];
           if (list.some((t) => t.toolId === toolId)) return prev;
@@ -366,11 +446,10 @@ export function useExtensionMessages(
             ...prev,
             [id]: [
               ...list,
-              { toolId, status, done: false, permissionWait: permissionActive || false },
+              { toolId, status, done: false, permissionWait: permissionActive || false, question },
             ],
           };
         });
-        const toolName = (msg.toolName as string | undefined) ?? extractToolName(status);
         os.setAgentTool(id, toolName);
         os.setAgentActive(id, true);
         // Don't clear the permission bubble if the hook already confirmed permission is needed
@@ -783,6 +862,8 @@ export function useExtensionMessages(
     hooksStatusSeq,
     setHooksEnabled,
     hooksInfoShown,
+    agentTerminals,
+    officeRooms,
     consentRequest,
     // Called when a tour ends (answer + Let's Go, the X, Escape) with the providerId that tour was ABOUT, removing
     // that entry so the next provider's ask becomes the head. Keyed by id, not a blind shift: an answered ask's own

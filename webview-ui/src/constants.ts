@@ -312,3 +312,150 @@ export const PET_THUMB_SCALE_MARGIN = 0.85;
 export const EMPTY_SPRITE_THUMBNAIL_BG = '#333';
 /** Maximum string length for a PlacedPet.id (defends against pathologically-long layout entries). */
 export const MAX_PET_ID_LENGTH = 128;
+
+// ── Terminal panel ───────────────────────────────────────────
+/** Smallest font the pane terminal will try when fitting the panel. */
+export const TERMINAL_FONT_MIN_PX = 6;
+/** Largest font the pane terminal will try when fitting the panel. */
+export const TERMINAL_FONT_MAX_PX = 28;
+/** Fallback xterm colors when the page CSS variables have not resolved. */
+export const TERMINAL_BG = '#1e1e2e';
+export const TERMINAL_FG = '#e6e6f0';
+export const TERMINAL_CURSOR = '#746fff';
+
+// ── 3D office ────────────────────────────────────────────────
+/** Desk slot inside a pod (world metres): one desk, its chair, and room for helpers beside it. */
+export const OFFICE3D_DESK_PITCH_X = 2.4;
+export const OFFICE3D_DESK_PITCH_Z = 2.6;
+/** Rug margin around a pod's desks, and the band in front of them that holds the pod's sign. */
+export const OFFICE3D_POD_PAD = 0.35;
+export const OFFICE3D_POD_SIGN_DEPTH = 0.8;
+export const OFFICE3D_POD_GAP = 0.8;
+/** Floor around the pods: the sides and back hold the furniture, the front is the walkway. */
+export const OFFICE3D_ROOM_PAD_X = 1.6;
+export const OFFICE3D_ROOM_PAD_BACK = 1.7;
+export const OFFICE3D_ROOM_PAD_FRONT = 0.7;
+export const OFFICE3D_ROOM_GAP = 1.4;
+export const OFFICE3D_WALL_HEIGHT = 1.7;
+/** Top of a room's floor; desks, characters and rugs stand on it. */
+export const OFFICE3D_FLOOR_Y = 0.06;
+/** A desk slot, local to its centre (z toward the viewer): the character sits behind the desk, facing the camera. */
+export const OFFICE3D_DESK_HEIGHT = 0.6;
+export const OFFICE3D_DESK_Z = 0.18;
+export const OFFICE3D_SEAT_Z = -0.38;
+/** Sub-agent helpers stand beside their parent's desk at this size. */
+export const OFFICE3D_HELPER_SCALE = 0.5;
+export const OFFICE3D_BEAM_HEIGHT = 5;
+/** Seconds a character takes to move from one status pose to the next. */
+export const OFFICE3D_POSE_BLEND_S = 0.45;
+export const OFFICE3D_CONFETTI_S = 1.4;
+/** On-screen depth per metre of floor relative to width, desks and labels included. */
+export const OFFICE3D_DEPTH_FORESHORTEN = 0.65;
+/** Viewports narrower than this (width/height) get the phone treatment. */
+export const OFFICE3D_NARROW_ASPECT = 0.8;
+/** Extra floor at the front of each room on narrow viewports, per line of its name list. */
+export const OFFICE3D_ROSTER_LINE_DEPTH = 1.1;
+/** Names per line of that list; office3d.css lays it out in the same number of columns. */
+export const OFFICE3D_NARROW_ROSTER_COLUMNS = 2;
+/** Desk size on the porch behind the rooms, relative to a room desk. */
+export const OFFICE3D_BACKGROUND_SCALE = 0.65;
+/** Porch names per roster line on wide viewports, where that list wraps across the porch. */
+export const OFFICE3D_BACKGROUND_ROSTER_PER_LINE = 5;
+/** Helpers per column beside their parent's desk. */
+export const OFFICE3D_HELPERS_PER_COLUMN = 3;
+/** Default camera tilt from straight down, wide and narrow viewports (radians). */
+export const OFFICE3D_CAMERA_POLAR = 0.78;
+export const OFFICE3D_CAMERA_POLAR_NARROW = 0.5;
+export const OFFICE3D_CAMERA_MAX_POLAR = 1.22;
+export const OFFICE3D_CAMERA_MIN_DISTANCE = 2.5;
+export const OFFICE3D_CAMERA_FOV = 34;
+/** Fraction of the viewport (NDC half-extent) the fitted office may fill. */
+export const OFFICE3D_FIT_MARGIN = 0.92;
+export const OFFICE3D_FOCUS_DURATION_MS = 900;
+/** Pixel ratio range; the renderer steps between them by frame time. Below 1 the scene blurs under crisp labels. */
+export const OFFICE3D_MAX_PIXEL_RATIO = 2;
+export const OFFICE3D_MIN_PIXEL_RATIO = 1;
+export const OFFICE3D_PIXEL_RATIO_STEP = 0.25;
+/** Frame intervals that count as slow (step the pixel ratio down) and smooth (step it up). */
+export const OFFICE3D_SLOW_FRAME_MS = 28;
+export const OFFICE3D_SMOOTH_FRAME_MS = 18;
+export const OFFICE3D_STATS_INTERVAL_MS = 500;
+export const OFFICE3D_POLL_MS = 250;
+export const OFFICE3D_CLICK_SLOP_PX = 6;
+/** Desk label density by desk pitch on screen (px). */
+export const OFFICE3D_FULL_LABEL_PX = 150;
+export const OFFICE3D_COMPACT_LABEL_PX = 90;
+/** Screen space the room bar (top) and toolbar (bottom) cover; camera fits leave it free. */
+export const OFFICE3D_INSET_TOP_PX = 60;
+export const OFFICE3D_INSET_BOTTOM_PX = 72;
+export const OFFICE3D_INSET_SIDE_PX = 14;
+/** localStorage key prefix for a viewer's character choice, per desk name. */
+export const OFFICE3D_CHARACTER_KEY = 'pixel-agents.office3d.character:';
+
+export const OFFICE3D_STATUS_COLORS = {
+  working: 0x4da3ff,
+  'needs-permission': 0xffa21f,
+  'waiting-input': 0xc77dff,
+  done: 0x5fd38a,
+  idle: 0x7a7f96,
+} as const;
+
+/** The furnished rooms: warm wood, plaster, fabric and lamplight. */
+export const OFFICE3D_COLORS = {
+  background: 0x15110f,
+  ground: 0x211a16,
+  hemiSky: 0xffe6c7,
+  hemiGround: 0x3a2a22,
+  keyLight: 0xffe2bd,
+  selection: 0xfff4dc,
+  slabEdge: 0x3b2618,
+  floorWood: [0x9a6a43, 0x8e5f3b, 0xa5744a, 0x87583a],
+  porchWood: [0x8d8378, 0x857a6f, 0x968b80],
+  walls: [0xe8d5b5, 0xc9d6bf, 0xe5c3a8, 0xc8cfdc],
+  wainscot: 0x7a5236,
+  trim: 0x5c3b25,
+  windowFrame: 0xf3ead8,
+  skyTop: 0x8fc4ff,
+  skyBottom: 0xffd9a8,
+  curtains: [0xb5543c, 0x5d7f6a, 0xd2a24c, 0x6a6aa8],
+  shelf: 0x6e4a2f,
+  books: [0xc0392b, 0x2e86c1, 0xf1c40f, 0x27ae60, 0x8e44ad, 0xe67e22, 0xecf0f1, 0x34495e],
+  sofa: [0x55708a, 0x8a5a44, 0x6d7a4f],
+  cushion: [0xf0c987, 0xe08f6a, 0xd9e0c6],
+  pictureFrame: 0x3b2a1e,
+  art: [0xf6b26b, 0x6fa8dc, 0x93c47d, 0xe06666, 0xffe599, 0x8e7cc3],
+  rugs: [
+    [0x3f6e8c, 0xd9c7a1],
+    [0x8c4a3f, 0xe8d3a8],
+    [0x4f7a5a, 0xe2d6b2],
+    [0x6a5a8c, 0xe5d4b0],
+    [0x9a7440, 0xf0e2c0],
+    [0x3e7a78, 0xe9d8b0],
+  ],
+  pinnedRug: 0x8e2f2a,
+  pinnedTrim: 0xe8b84a,
+  deskTop: 0xc49464,
+  deskLeg: 0x3a2a20,
+  chairSeat: [0x3d5a80, 0x9c4f3c, 0x4a7a55, 0x7b5aa0, 0xb08a3a],
+  chairBase: 0x2b2b30,
+  monitor: 0x23252b,
+  keyboard: 0xe9e4da,
+  mug: [0xf5f0e6, 0xd35400, 0x2980b9, 0x16a085],
+  pot: 0xc0663f,
+  leaves: [0x4f8a4b, 0x3d7a46, 0x6aa25a],
+  lampShade: 0xffd79a,
+  lampMetal: 0x2f2a26,
+  lampPool: 0xffb35c,
+  windowPool: 0xffd8a0,
+  railing: 0x6b4a33,
+  bulb: 0xffcf7a,
+  sign: 0xd9b382,
+  signPost: 0x5a3c26,
+  clockFace: 0xf7f1e3,
+  duck: 0xffd43b,
+  beak: 0xf08c00,
+  rope: 0xa61e2a,
+  wire: 0x2a2420,
+  screenOff: 0x2a2d36,
+  white: 0xffffff,
+} as const;

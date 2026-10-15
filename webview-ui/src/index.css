@@ -101,6 +101,123 @@
 }
 
 @layer components {
+  /* Office and terminal sit side by side. The terminal keeps 45% and does not wrap. */
+  .office-shell {
+    display: flex;
+    flex-wrap: nowrap;
+    inline-size: 100%;
+    block-size: 100%;
+    min-inline-size: 0;
+  }
+
+  .office-stage {
+    position: relative;
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    block-size: 100%;
+    overflow: clip;
+  }
+
+  .terminal-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 45%;
+    min-inline-size: 0;
+    block-size: 100%;
+    overflow: clip;
+    background: var(--color-bg);
+    border-inline-start: 2px solid var(--color-border);
+    box-shadow: var(--shadow-pixel);
+  }
+
+  .terminal-panel-wide {
+    flex-basis: 100%;
+  }
+
+  .terminal-panel-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 6px;
+  }
+
+  .terminal-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex: 0 0 auto;
+    min-inline-size: 0;
+    padding-block: 6px;
+    padding-inline: 8px;
+    background: var(--color-bg-dark);
+    border-block-end: 2px solid var(--color-border);
+  }
+
+  .terminal-panel-title {
+    min-inline-size: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .terminal-panel-name {
+    margin-inline-start: 8px;
+    color: var(--color-text-muted);
+  }
+
+  .terminal-panel-close {
+    position: relative;
+    flex: 0 0 auto;
+    padding-block: 4px;
+    padding-inline: 10px;
+    color: var(--color-text);
+    background: var(--color-btn-bg);
+    border: 2px solid var(--color-border);
+    box-shadow: var(--shadow-pixel);
+    cursor: pointer;
+  }
+
+  .terminal-panel-close::after {
+    content: '';
+    position: absolute;
+    inset: min(0px, calc((100% - 44px) / 2));
+  }
+
+  .terminal-panel-close:focus-visible {
+    outline: 2px solid var(--color-accent-bright);
+    outline-offset: 2px;
+  }
+
+  .terminal-panel-close:active {
+    background: var(--color-active-bg);
+    transform: scale(0.97);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .terminal-panel-close:hover {
+      background: var(--color-btn-hover);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .terminal-panel-close {
+      transition: transform 160ms ease-out;
+    }
+  }
+
+  .terminal-panel-body {
+    flex: 1 1 auto;
+    min-block-size: 0;
+    overflow: clip;
+    background: var(--color-bg);
+  }
+
+  /* xterm scrolls this node itself. clip would block that scroll. */
+  .terminal-panel-body .xterm-viewport {
+    overflow: hidden !important;
+  }
+
   /* Panel with standard pixel-art border + shadow */
   .pixel-panel {
     @apply bg-bg border-2 border-border rounded-none shadow-pixel;

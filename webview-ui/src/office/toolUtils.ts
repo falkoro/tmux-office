@@ -27,17 +27,25 @@ export function extractToolName(status: string): string | null {
 const providerCaps: {
   readingTools: Set<string>;
   subagentToolNames: Set<string>;
+  questionTools: Set<string>;
 } = {
   readingTools: new Set(),
   subagentToolNames: new Set(),
+  questionTools: new Set(),
 };
 
 export function setProviderCapabilities(caps: {
   readingTools: string[];
   subagentToolNames: string[];
+  questionTools?: string[];
 }): void {
   providerCaps.readingTools = new Set(caps.readingTools);
   providerCaps.subagentToolNames = new Set(caps.subagentToolNames);
+  providerCaps.questionTools = new Set(caps.questionTools);
+}
+
+export function isQuestionToolName(name: string | null | undefined): boolean {
+  return typeof name === 'string' && providerCaps.questionTools.has(name);
 }
 
 export function isReadingToolName(name: string | null | undefined): boolean {

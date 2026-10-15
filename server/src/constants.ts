@@ -47,6 +47,17 @@ export const GLOBAL_SCAN_ACTIVE_MIN_SIZE = 3_072; // 3KB
 /** Only adopt global JSONL files modified within this window */
 export const GLOBAL_SCAN_ACTIVE_MAX_AGE_MS = 600_000; // 10 minutes
 
+/** How often the live Claude session registry re-reads session files under each ~/.claude* config dir. */
+export const CLAUDE_SESSION_POLL_INTERVAL_MS = 2_000;
+/** How often an attached terminal re-reads the target window's size. */
+export const TERM_SIZE_POLL_INTERVAL_MS = 2_000;
+/** Cloudflare Access signing keys are cached for this long, then refetched. */
+export const ACCESS_JWKS_CACHE_MS = 10 * 60 * 1000;
+/** At most one unknown-kid refetch of the Access signing keys per this window. */
+export const ACCESS_JWKS_MIN_REFETCH_MS = 30_000;
+/** Clock skew tolerated on Access JWT `exp` / `nbf` (seconds). */
+export const ACCESS_JWT_CLOCK_SKEW_SEC = 60;
+
 // ── Display Truncation + Pixel Agents Server paths ──────────
 // Centralized in core/src/constants.ts; re-exported here for back-compat.
 export {

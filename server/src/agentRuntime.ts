@@ -12,11 +12,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+import type { OfficeRooms } from '../../core/src/messages.js';
 import type { HookProvider } from '../../core/src/provider.js';
 import type { AgentStateStore } from './agentStateStore.js';
-import { DEFAULT_MAX_CONTEXT_TOKENS } from './constants.js';
+import { CLAUDE_SESSION_POLL_INTERVAL_MS, DEFAULT_MAX_CONTEXT_TOKENS } from './constants.js';
 import { DismissalTracker } from './dismissalTracker.js';
 import {
+  adoptExternalSession,
   adoptExternalSessionFromHook,
   ensureProjectScan,
   isTrackedProjectDir,
@@ -36,11 +38,20 @@ import {
 } from './fileWatcher.js';
 import type { HookEvent } from './hookEventHandler.js';
 import { HookEventHandler } from './hookEventHandler.js';
+import { mayCreateDiscoveredTopLevel } from './liveOnly.js';
+import { syncLiveSessionMetadata } from './liveSessionSync.js';
+import { resolveLiveTmuxLocations } from './liveTmuxLocation.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { PathSet, pathsMatch } from './pathKey.js';
+import {
+  type ClaudeSessionRegistry,
+  type LiveClaudeSession,
+  transcriptPathForSession,
+} from './providers/hook/claude/claudeSessionRegistry.js';
 import { SessionRouter } from './sessionRouter.js';
 import { SubagentWatch } from './subagentWatch.js';
 import { cancelPermissionTimer, cancelWaitingTimer } from './timerManager.js';
+import { listTmuxPanes, type TmuxPaneRecord } from './tmuxTerminal.js';
 import {
   setBackgroundAgentCompletedCallback,
   setBackgroundAgentDetectedCallback,
@@ -73,9 +84,31 @@ export class AgentRuntime {
   readonly activeAgentId = { current: null as number | null };
   private externalScanTimer: ReturnType<typeof setInterval> | null = null;
   private staleCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private liveSessionTimer: ReturnType<typeof setInterval> | null = null;
+  private lastLiveSessionCount = -1;
+  /**
+   * Latest `tmux list-panes` snapshot. Null means the list failed or has not
+   * returned, so this tick keeps the registry's own tmux fields.
+   */
+  private paneIndex: readonly TmuxPaneRecord[] | null = null;
+  /** Bumped on each list and on dispose, so a stale result cannot apply. */
+  private livePaneGeneration = 0;
 
   // Configuration refs (mutable, shared with scanners)
   readonly watchAllSessions = { current: false };
+  /**
+   * Process-lifetime latch for the CLI `--watch-all` flag. webviewReady and
+   * the settings checkbox read the persisted preference and would otherwise
+   * turn Watch All Sessions back off. Not written to disk.
+   */
+  forceWatchAll = false;
+  /**
+   * CLI `--live-only`. Top-level agents exist only while their session id is
+   * in the Claude session registry. Not written to disk.
+   */
+  readonly liveOnly = { current: false };
+  /** Named rooms from PIXEL_AGENTS_OFFICE_ROOMS, replayed on webviewReady. */
+  officeRooms: OfficeRooms | null = null;
   readonly hooksEnabled = { current: true };
 
   // Dependencies
@@ -197,6 +230,9 @@ export class AgentRuntime {
             `[Pixel Agents] Hook: external session ${sessionId.slice(0, 8)}... not adopted ` +
               `(project untracked, Watch All Sessions off)`,
           );
+          return;
+        }
+        if (!mayCreateDiscoveredTopLevel(this.liveOnly.current)) {
           return;
         }
         adoptExternalSessionFromHook(
@@ -415,12 +451,18 @@ export class AgentRuntime {
       () => this.store.persist(),
       onAgentCreated ?? ((agent) => this.registerAgent(agent.sessionId, agent.id)),
       this.hooksEnabled,
+      this.liveOnly,
     );
   }
 
   /** Start external session scanning (detects sessions from other terminals). */
   startExternalScanning(projectDir: string): void {
     if (this.externalScanTimer) return;
+    // Its only job is adopting top-level transcripts. Live-only adopts those
+    // from the registry tick instead.
+    if (!mayCreateDiscoveredTopLevel(this.liveOnly.current)) {
+      return;
+    }
 
     this.externalScanTimer = startExternalSessionScanning(
       projectDir,
@@ -436,6 +478,163 @@ export class AgentRuntime {
       this.watchAllSessions,
       this.hooksEnabled,
     );
+  }
+
+  /**
+   * Poll the Claude session registry. The first tick runs immediately.
+   * Adopts a live session when Watch All is on, its project dir is tracked,
+   * or `--live-only` is set (every live session). A session that leaves the
+   * registry drops its agent only in live-only mode.
+   * Each tick also lists tmux panes once and follows them by pane id.
+   */
+  startLiveSessionRegistry(
+    registry: ClaudeSessionRegistry,
+    listPanes: () => Promise<readonly TmuxPaneRecord[] | null> = listTmuxPanes,
+  ): void {
+    if (this.liveSessionTimer) return;
+    const tick = (): void => {
+      try {
+        registry.refresh();
+        this.applyLiveSessions(registry);
+      } catch (err) {
+        console.error(
+          `[Pixel Agents] Live session scan failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      this.refreshLivePaneIndex(registry, listPanes);
+    };
+    tick();
+    this.liveSessionTimer = setInterval(tick, CLAUDE_SESSION_POLL_INTERVAL_MS);
+  }
+
+  /**
+   * One read-only pane list per tick. The result is applied when it arrives.
+   * A newer tick or dispose wins, and a failure keeps the registry locations.
+   * Refresh again here: the in-memory registry may be older than the files,
+   * and removal must not run against that stale set.
+   */
+  private refreshLivePaneIndex(
+    registry: ClaudeSessionRegistry,
+    listPanes: () => Promise<readonly TmuxPaneRecord[] | null>,
+  ): void {
+    const generation = ++this.livePaneGeneration;
+    void listPanes()
+      .then((panes) => {
+        this.applyPaneIndex(registry, generation, panes);
+      })
+      .catch(() => {
+        this.applyPaneIndex(registry, generation, null);
+      });
+  }
+
+  private applyPaneIndex(
+    registry: ClaudeSessionRegistry,
+    generation: number,
+    panes: readonly TmuxPaneRecord[] | null,
+  ): void {
+    if (generation !== this.livePaneGeneration) {
+      return;
+    }
+    this.paneIndex = panes;
+    try {
+      registry.refresh();
+      this.applyLiveSessions(registry);
+    } catch (err) {
+      console.error(
+        `[Pixel Agents] Live session scan failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  private applyLiveSessions(registry: ClaudeSessionRegistry): void {
+    const sessions = registry.sessions();
+    if (sessions.length !== this.lastLiveSessionCount) {
+      this.lastLiveSessionCount = sessions.length;
+      console.log(`[Pixel Agents] Live Claude sessions: ${sessions.length}`);
+    }
+    // Copies only. Registry objects stay as read from disk, so a later failed
+    // listing can fall back to those tmux fields.
+    const locations = resolveLiveTmuxLocations(sessions, this.paneIndex);
+    const corrected = sessions.map((session) => ({
+      ...session,
+      tmux: locations.get(session.sessionId) ?? null,
+    }));
+    const byId = new Map(corrected.map((session) => [session.sessionId, session]));
+    syncLiveSessionMetadata(this.store, { get: (sessionId) => byId.get(sessionId) });
+    for (const session of corrected) {
+      this.adoptLiveSession(session);
+    }
+    this.removeSessionsThatLeft(registry);
+  }
+
+  /**
+   * Drop top-level agents whose session is no longer in the registry.
+   * Children stay while their lead stays, and leave with the lead.
+   * The transcript is not dismissed: a new pid with the same session id
+   * must be adopted on a later tick.
+   */
+  private removeSessionsThatLeft(registry: ClaudeSessionRegistry): void {
+    if (!this.liveOnly.current) return;
+    const live = new Set(registry.sessions().map((session) => session.sessionId));
+    const departing: number[] = [];
+    for (const [id, agent] of this.store) {
+      if (agent.leadAgentId !== undefined) continue;
+      if (live.has(agent.sessionId)) continue;
+      departing.push(id);
+    }
+    for (const id of departing) {
+      this.removeTeammates(id);
+      this.subagentWatch.removeByLead(id);
+      const agent = this.store.get(id);
+      if (!agent) continue;
+      this.unregisterAgent(agent.sessionId);
+      this.removeAgent(id);
+    }
+  }
+
+  private adoptLiveSession(session: LiveClaudeSession): void {
+    const jsonlFile = transcriptPathForSession(session);
+    if (!jsonlFile) return;
+    const projectDir = path.dirname(jsonlFile);
+    const watching =
+      this.liveOnly.current ||
+      this.forceWatchAll ||
+      this.watchAllSessions.current ||
+      isTrackedProjectDir(projectDir);
+    if (!watching) return;
+    for (const agent of this.store.values()) {
+      if (agent.sessionId === session.sessionId || pathsMatch(agent.jsonlFile, jsonlFile)) return;
+    }
+    if (this.dismissalTracker.isDismissed(jsonlFile)) return;
+    if (this.dismissalTracker.isPermanentlyDismissed(jsonlFile)) return;
+
+    this.knownJsonlFiles.add(jsonlFile);
+    this.dismissalTracker.clearSeededMtime(jsonlFile);
+    adoptExternalSession(
+      jsonlFile,
+      projectDir,
+      this.store.nextAgentId,
+      this.store,
+      this.fileWatchers,
+      this.pollingTimers,
+      this.waitingTimers,
+      this.permissionTimers,
+      () => this.store.persist(),
+    );
+    const adopted = [...this.store.values()].find(
+      (agent) => agent.sessionId === session.sessionId || pathsMatch(agent.jsonlFile, jsonlFile),
+    );
+    if (!adopted) return;
+    adopted.sessionId = session.sessionId;
+    adopted.tmux = session.tmux;
+    adopted.registryName = session.name;
+    this.registerAgent(adopted.sessionId, adopted.id);
+    this.store.broadcast({
+      type: 'agentTerminal',
+      id: adopted.id,
+      name: session.name,
+      tmux: session.tmux,
+    });
   }
 
   /** Start stale external agent check (removes agents whose JSONL files are deleted). */
@@ -458,6 +657,9 @@ export class AgentRuntime {
    * terminal agents via vscode.window.terminals.
    */
   restoreExternalAgents(): void {
+    if (!mayCreateDiscoveredTopLevel(this.liveOnly.current)) {
+      return;
+    }
     const adapter = this.store.getAdapter();
     if (!adapter) return;
     const persisted = adapter.loadAgents();
@@ -573,6 +775,11 @@ export class AgentRuntime {
       clearInterval(this.staleCheckTimer);
       this.staleCheckTimer = null;
     }
+    if (this.liveSessionTimer) {
+      clearInterval(this.liveSessionTimer);
+      this.liveSessionTimer = null;
+    }
+    this.livePaneGeneration++;
 
     for (const id of [...this.store.keys()]) {
       this.removeAgent(id);

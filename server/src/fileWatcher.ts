@@ -44,6 +44,7 @@ import {
 } from './constants.js';
 import { seedContextUsage } from './contextUsage.js';
 import type { DismissalTracker } from './dismissalTracker.js';
+import { mayCreateDiscoveredTopLevel } from './liveOnly.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { pathsMatch } from './pathKey.js';
 import type { SubagentWatch } from './subagentWatch.js';
@@ -284,6 +285,7 @@ export function ensureProjectScan(
   persistAgents: () => void,
   _onAgentCreated?: (agent: AgentState) => void,
   hooksEnabledRef?: { current: boolean },
+  liveOnlyRef?: { current: boolean },
 ): void {
   // Set deps for per-agent /clear detection (only on first call)
   if (!clearDetectionDeps) {
@@ -347,7 +349,12 @@ export function ensureProjectScan(
     }
 
     // When hooks are active, SessionStart handles new file detection.
+    // Live-only adopts top-level transcripts from the registry tick only.
+    // Teammate and background-agent scans above still run.
     if (hooksEnabledRef?.current) return;
+    if (!mayCreateDiscoveredTopLevel(liveOnlyRef?.current ?? false)) {
+      return;
+    }
 
     for (const dir of trackedProjectDirs) {
       scanForNewJsonlFiles(
@@ -1155,7 +1162,7 @@ export function adoptExternalSessionFromHook(
   }
 }
 
-function adoptExternalSession(
+export function adoptExternalSession(
   jsonlFile: string,
   projectDir: string,
   nextAgentIdRef: { current: number },

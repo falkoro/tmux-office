@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import type { AccessVerifier } from './accessJwt.js';
 import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type {
@@ -18,6 +19,8 @@ import {
   SERVERS_DIR,
 } from './constants.js';
 import { createHttpServer } from './httpServer.js';
+import type { OfficeFeedState } from './officeFeed.js';
+import type { ClaudeSessionRegistry } from './providers/hook/claude/claudeSessionRegistry.js';
 import type { ServerConfig } from './serverConfig.js';
 import { isServerConfig, isServerTarget } from './serverConfig.js';
 
@@ -69,6 +72,11 @@ export class PixelAgentsServer {
     assetCache?: AssetCache;
     onSetHooksEnabled?: SetHooksEnabledSideEffect;
     onReloadAssets?: ReloadAssetsSideEffect;
+    insecureLocalTerminal?: boolean;
+    access?: AccessVerifier;
+    sessionRegistry?: ClaudeSessionRegistry;
+    officeFeed?: OfficeFeedState;
+    officeEmbedOrigins?: readonly string[];
   }): Promise<ServerConfig> {
     const embedded = options?.embedded ?? true;
     const wantsSpa = !embedded;
@@ -106,6 +114,11 @@ export class PixelAgentsServer {
       onHookEvent: (providerId, event) => this.callback?.(providerId, event),
       onSetHooksEnabled: options?.onSetHooksEnabled,
       onReloadAssets: options?.onReloadAssets,
+      insecureLocalTerminal: options?.insecureLocalTerminal,
+      access: options?.access,
+      sessionRegistry: options?.sessionRegistry,
+      officeFeed: options?.officeFeed,
+      officeEmbedOrigins: options?.officeEmbedOrigins,
     });
 
     this.app = app;
