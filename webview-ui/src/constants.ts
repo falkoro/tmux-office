@@ -344,9 +344,9 @@ export const OFFICE3D_DESK_HEIGHT = 0.6;
 export const OFFICE3D_DESK_Z = 0.18;
 export const OFFICE3D_SEAT_Z = -0.38;
 /** Sub-agent helpers stand in front of their parent's desk at this size. */
-export const OFFICE3D_HELPER_SCALE = 0.5;
+export const OFFICE3D_HELPER_SCALE = 0.42;
 /** A crew desk's size next to its session's overseer, and crew desks per row in front of it. */
-export const OFFICE3D_CREW_SCALE = 0.75;
+export const OFFICE3D_CREW_SCALE = 0.6;
 export const OFFICE3D_CREW_PER_ROW = 4;
 export const OFFICE3D_BEAM_HEIGHT = 5;
 /** Seconds a character takes to move from one status pose to the next. */

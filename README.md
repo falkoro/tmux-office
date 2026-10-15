@@ -17,6 +17,7 @@ tmux office is built on [Pixel Agents](https://github.com/pixel-agents-hq/pixel-
 | Idle              | Dozes behind a drifting `z`.                             |
 
 - A pod's sign reads **SESSION** over the tmux session name. Signs draw above every desk label, so you read the session first.
+- A desk card shows the agent name without its trailing hex id, with spaces for hyphens. The overseer's card has a star. Hover a card for the whole name.
 - Click a desk to open its tmux pane in a terminal panel, where you can watch and type. The panel needs Cloudflare Access or `--insecure-local-terminal`. See [Expose it safely](#expose-it-safely).
 - Click a desk to select it. Its label then shows a character picker: astronaut, cat, chef, dog, frog, knight, penguin, robot, or wizard. Your browser remembers the choice per agent name. Goblins are for sub-agents only.
 - Add `#work` to the URL to focus the room `work`, or `#work-1` to focus one session. A session named like a room is `#session:<name>`.
@@ -53,13 +54,13 @@ The rig prints the office URL. It runs fake agents on a private tmux server (`tm
 
 Set these environment variables before you start the server.
 
-| Variable                         | Effect                                                                                                                                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PIXEL_AGENTS_OFFICE_ROOMS`      | Groups tmux sessions into rooms. Separate entries with `;`. `name=glob` puts every matching session in a room called `name`, and `*` matches any text. Without it, every session is a room. |
-| `PIXEL_AGENTS_OFFICE_PINNED`     | Sessions to pin, as names or globs separated by commas or spaces. A pinned session sits alone in the front row of its room, on a red rug.                                                   |
-| `PIXEL_AGENTS_OFFICE_OVERSEERS`  | Globs over agent names, separated by commas or spaces. In each session the first agent whose name matches is the overseer. Without a match, the agent in the lowest window is.              |
-| `PIXEL_AGENTS_OFFICE_BACKGROUND` | `hide` drops the porch. The porch holds agents outside tmux and sessions that match no room.                                                                                                |
-| `PIXEL_AGENTS_TMUX_SOCKET`       | The tmux socket to read, as in `tmux -L <name>`. Without it, the server reads the default tmux server.                                                                                      |
+| Variable                         | Effect                                                                                                                                                                                                                      |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PIXEL_AGENTS_OFFICE_ROOMS`      | Groups tmux sessions into rooms. Separate entries with `;`. `name=glob` puts every matching session in a room called `name`, and `*` matches any text. Without it, every session is a room.                                 |
+| `PIXEL_AGENTS_OFFICE_PINNED`     | Sessions to pin, as names or globs separated by commas or spaces. A pinned session sits alone in the front row of its room, on a red rug.                                                                                   |
+| `PIXEL_AGENTS_OFFICE_OVERSEERS`  | Globs over agent names, separated by commas or spaces. In each session the first agent whose name matches is the overseer, and its card drops the glob's literal start. Without a match, the agent in the lowest window is. |
+| `PIXEL_AGENTS_OFFICE_BACKGROUND` | `hide` drops the porch. The porch holds agents outside tmux and sessions that match no room.                                                                                                                                |
+| `PIXEL_AGENTS_TMUX_SOCKET`       | The tmux socket to read, as in `tmux -L <name>`. Without it, the server reads the default tmux server.                                                                                                                      |
 
 For example, to put `work-*` and `side-*` sessions in two rooms and pin `work-1`:
 

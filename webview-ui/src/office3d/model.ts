@@ -14,6 +14,8 @@ export interface HelperModel {
 export interface DeskModel {
   agentId: number;
   name: string;
+  /** The name on the desk's card. See deskLabels. */
+  label: string;
   pane: { session: string; windowId: string; paneId: string } | null;
   status: DeskStatus;
   tool: string | null;
@@ -157,6 +159,7 @@ export function deriveOffice(
     }
     const meta = terminals[ch.id];
     const tools = agentTools[ch.id];
+    const name = meta?.name || ch.sessionName || ch.folderName || `Agent ${ch.id}`;
     const status = deskStatus({
       bubbleType: ch.bubbleType,
       waitingAwaitingInput: ch.waitingAwaitingInput,
@@ -165,7 +168,8 @@ export function deriveOffice(
     });
     desks.set(ch.id, {
       agentId: ch.id,
-      name: meta?.name || ch.sessionName || ch.folderName || `Agent ${ch.id}`,
+      name,
+      label: name,
       pane: meta ? meta.tmux : (ch.tmux ?? null),
       status,
       tool: activityText(ch, tools, status),
@@ -246,7 +250,39 @@ export function deriveOffice(
   if (background.length > 0 && config?.background !== false) {
     rooms.push({ id: BACKGROUND_ROOM_ID, title: BACKGROUND_ROOM_TITLE, pods: toPods(background) });
   }
+  deskLabels(rooms, overseers);
   return rooms;
+}
+
+/** An agent name's trailing id, as in `triage-c9`. */
+const NAME_ID = /[-_][0-9a-f]{2,4}$/i;
+
+/**
+ * Card names that read like names. A label drops the name's trailing hex id and turns `-` and
+ * `_` into spaces. An overseer's label also drops the literal start of the glob that made it one,
+ * since its star says that already. Two desks whose labels would match keep their whole names.
+ */
+function deskLabels(rooms: RoomModel[], overseers: readonly string[]): void {
+  const short = new Map<DeskModel, string>();
+  for (const room of rooms) {
+    for (const pod of room.pods) {
+      pod.desks.forEach((desk, i) => {
+        let text = desk.name.replace(NAME_ID, '');
+        if (pod.hasOverseer && i === 0) {
+          const glob = overseers.find((g) => matchesRoomPattern([g], desk.name));
+          const role = glob?.split('*')[0] ?? '';
+          const rest = text.slice(role.length).replace(/^[-_\s]+/, '');
+          if (role && text.startsWith(role) && rest) text = rest;
+        }
+        short.set(desk, text || desk.name);
+      });
+    }
+  }
+  const seen = new Map<string, number>();
+  for (const text of short.values()) seen.set(text, (seen.get(text) ?? 0) + 1);
+  for (const [desk, text] of short) {
+    desk.label = (seen.get(text) === 1 ? text : desk.name).replace(/[-_]+/g, ' ');
+  }
 }
 
 /** The most urgent status in a room, used to heat its floor and label. */

@@ -22,7 +22,7 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - A desk's default kind comes from a hash of its name. The colourway also comes from the name.
 - A selected desk's label shows a picker. The choice is stored in localStorage under `pixel-agents.office3d.character:<name>`. Every storage access is wrapped in try/catch, so blocked storage falls back to the default.
 - The picker holds one option until it is opened, so a selected label stays light.
-- Sub-agents are goblins: half-size helpers that stand in rows of five in front of their parent's name card, facing you, and swing a hammer while they work. Nobody can pick the goblin for a desk.
+- Sub-agents are goblins: small helpers that stand in rows of five in front of their parent's name card, facing you, and swing a hammer while they work. Nobody can pick the goblin for a desk.
 
 ## Status
 
@@ -38,8 +38,9 @@ The 3D office answers two questions at a glance: what is each session doing, and
 
 - Labels are DOM through `CSS2DRenderer`. They stay crisp at any pixel ratio and are real buttons.
 - A desk label is a paper name card on the desk's front panel. Its bottom edge takes the status colour, and an overseer's card has a brass edge and a star. Room and pod signs are wooden plaques.
+- A card shows a short name. It drops the agent name's trailing hex id, such as `-c9`, and turns `-` and `_` into spaces. An overseer's card also drops the literal start of the glob that made it overseer, so `lead-api-c9` under `lead-*` reads `api`. Two desks whose short names match show their whole names. The card's tooltip always has the whole name.
 - Density follows the desk pitch on screen. Full shows name and activity. Compact shows the name. Roster replaces desk labels with a per-room name list.
-- A label is as wide as its own desk's pitch on screen, measured from that desk's depth, so the back row's narrower labels never overlap their neighbours. Names are never cut. A long name wraps at its hyphens.
+- A label is as wide as its own desk's pitch on screen, measured from that desk's depth, so the back row's narrower labels never overlap their neighbours. Crew desks are smaller but keep the full pitch, so their cards are as wide as the overseer's and their text is smaller. Names are never cut. A long name wraps between words.
 - On a phone the roster has two columns in floor that `planOffice` reserves in front of the pods.
 - The room bar lists the rooms. When one room is focused, or there is only one, it also lists that room's pods.
 - `#work` focuses the room. `#work-8` focuses the pod. A room wins a name it shares with a session, so that session is `#session:work`. The hash follows back and forward.

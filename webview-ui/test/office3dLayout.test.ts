@@ -21,6 +21,7 @@ function pod(id: string, desks: number, pinned = false): PodModel {
     desks: Array.from({ length: desks }, (): DeskModel => ({
       agentId: nextId++,
       name: 'a',
+      label: 'a',
       pane: null,
       status: 'idle',
       tool: null,

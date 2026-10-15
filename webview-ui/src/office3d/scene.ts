@@ -327,6 +327,7 @@ class DeskView {
     this.group.position.set(spot.x, FLOOR, spot.z);
     this.group.scale.setScalar(s);
     this.group.updateMatrix();
+    this.el.style.setProperty('--o3d-scale', String(s));
     this.el.dataset.background = String(background);
     this.el.dataset.overseer = String(spot.overseer);
     this.hit.setFromCenterAndSize(
@@ -336,11 +337,11 @@ class DeskView {
     this.placeHelpers();
   }
 
-  /** Size the label to this desk's own pixels per metre, so a far row's labels narrow with its pitch. */
+  /** Size the label to the desk pitch on screen. Every desk has the full pitch, so only depth narrows it. */
   scaleLabel(ppmAtUnitDepth: number, camera: PerspectiveCamera): void {
     camera.getWorldDirection(V2);
     const depth = V.setFromMatrixPosition(this.group.matrixWorld).sub(camera.position).dot(V2);
-    const ppm = ((ppmAtUnitDepth / depth) * this.group.scale.x).toFixed(0);
+    const ppm = (ppmAtUnitDepth / depth).toFixed(0);
     if (ppm === this.ppm) return;
     this.ppm = ppm;
     this.el.style.setProperty('--o3d-ppm', ppm);
@@ -391,7 +392,7 @@ class DeskView {
     this.el.title = `${model.name}: ${activity}`;
     this.pickEl.title = `Character for ${model.name}`;
     this.pickEl.ariaLabel = `Character for ${model.name}`;
-    setText(this.nameEl, model.name);
+    setText(this.nameEl, model.label);
     setText(this.crewEl, model.helpers.length > 0 ? `+${model.helpers.length}` : '');
     setText(this.statusEl, status === 'working' ? activity : STATUS_TEXT[status]);
     this.syncHelpers(model.helpers, t, reduced);
@@ -611,7 +612,7 @@ class RoomView {
 
   private syncRoster(room: RoomModel): void {
     const desks = roomDesks(room);
-    const key = JSON.stringify(desks.map((d) => [d.agentId, d.name, d.status]));
+    const key = JSON.stringify(desks.map((d) => [d.agentId, d.label, d.status]));
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     this.rosterEl.replaceChildren(
@@ -621,7 +622,7 @@ class RoomView {
         item.dataset.status = desk.status;
         item.title = `${desk.name}: ${STATUS_TEXT[desk.status]}`;
         el('span', 'o3d-dot', item);
-        el('span', 'o3d-roster-name', item).textContent = desk.name;
+        el('span', 'o3d-roster-name', item).textContent = desk.label;
         item.addEventListener('click', (e) => {
           e.stopPropagation();
           this.ctx.pick(desk.agentId);

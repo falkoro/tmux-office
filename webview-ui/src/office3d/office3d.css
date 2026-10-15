@@ -81,10 +81,10 @@
   flex-direction: column;
   align-items: center;
   gap: 1px;
-  /* A shrunken background desk would otherwise break its name every two letters. */
+  /* A far desk would otherwise break its name every two letters. */
   max-inline-size: max(9.5em, calc(var(--o3d-ppm) * 2.3px));
   padding: 3px 9px 3px;
-  font-size: clamp(12px, calc(var(--o3d-ppm) * 0.2px), 16px);
+  font-size: clamp(12px, calc(var(--o3d-ppm) * var(--o3d-scale, 1) * 0.2px), 16px);
   line-height: 1.15;
   color: var(--o3d-ink);
   background: var(--o3d-card);
