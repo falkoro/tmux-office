@@ -19,7 +19,7 @@ tmux office is built on [Pixel Agents](https://github.com/pixel-agents-hq/pixel-
 - A pod's sign reads **SESSION** over the tmux session name. Signs draw above every desk label, so you read the session first.
 - Click a desk to open its tmux pane in a terminal panel, where you can watch and type. The panel needs Cloudflare Access or `--insecure-local-terminal`. See [Expose it safely](#expose-it-safely).
 - Each desk label has a character picker: astronaut, cat, chef, dog, frog, knight, penguin, robot, or wizard. Your browser remembers the choice per agent name. Goblins are for sub-agents only.
-- Add `#work` to the URL to focus the room `work`, or `#work-1` to focus one session.
+- Add `#work` to the URL to focus the room `work`, or `#work-1` to focus one session. A session named like a room is `#session:<name>`.
 - Add `?view=pixel` to the URL for the original pixel office.
 
 ## Run it

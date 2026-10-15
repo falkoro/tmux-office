@@ -88,8 +88,15 @@ import type { OfficeFurniture } from './furniture.js';
 import { buildOffice, radialTexture } from './furniture.js';
 import type { DeskSpot, OfficePlan, PodSpot, RoomSpot } from './layout.js';
 import { planOffice } from './layout.js';
-import type { DeskModel, DeskStatus, HelperModel, PodModel, RoomModel } from './model.js';
-import { BACKGROUND_ROOM_ID, roomDesks, roomHeat, STATUS_TEXT } from './model.js';
+import type { DeskModel, DeskStatus, Focus, HelperModel, PodModel, RoomModel } from './model.js';
+import {
+  BACKGROUND_ROOM_ID,
+  focusFromHash,
+  focusHash,
+  roomDesks,
+  roomHeat,
+  STATUS_TEXT,
+} from './model.js';
 
 export interface OfficeSnapshot {
   rooms: RoomModel[];
@@ -98,8 +105,8 @@ export interface OfficeSnapshot {
 
 export interface SceneCallbacks {
   onPick(agentId: number): void;
-  /** A room id, a pod id, or null for the whole office. */
-  onFocus(id: string | null): void;
+  /** A room, a pod, or null for the whole office. */
+  onFocus(focus: Focus | null): void;
 }
 
 const MOOD: Record<DeskStatus, CharacterMood> = {
@@ -159,7 +166,7 @@ interface Ctx {
   pick(agentId: number): void;
   choose(name: string, kind: CharacterKind): void;
   kindFor(name: string): CharacterKind;
-  focus(id: string): void;
+  focus(target: Focus): void;
 }
 
 /** One character: its mood, and the blend from the last pose into the next. */
@@ -502,7 +509,7 @@ class RoomView {
     this.chipsEl = el('span', 'o3d-room-chips', this.labelEl);
     this.labelEl.addEventListener('click', (e) => {
       e.stopPropagation();
-      ctx.focus(id);
+      ctx.focus({ kind: 'room', id });
     });
     this.label = new CSS2DObject(this.labelEl);
     // Hangs from the top of the back wall (the porch railing), so it never reaches the room behind.
@@ -579,7 +586,7 @@ class RoomView {
         const name = el('span', 'o3d-pod-name', node);
         node.addEventListener('click', (e) => {
           e.stopPropagation();
-          this.ctx.focus(pod.id);
+          this.ctx.focus({ kind: 'pod', id: pod.id });
         });
         sign = { obj: new CSS2DObject(node), el: node, name };
         // Hangs from the rug's front edge, clear of the desk labels above it.
@@ -680,7 +687,7 @@ export class OfficeScene {
   private snapshot: OfficeSnapshot = { rooms: [], selectedId: null };
   private plan: OfficePlan = planOffice([], 1);
   private planKey = '';
-  private focusId: string | null = null;
+  private focused: Focus | null = null;
   private pendingHash: string | null;
   private userMoved = false;
   private tween: Tween | null = null;
@@ -713,7 +720,7 @@ export class OfficeScene {
       pick: (id) => this.callbacks.onPick(id),
       choose: this.choose,
       kindFor: (name) => this.picks.get(name) ?? loadCharacter(name),
-      focus: (id) => this.focus(id),
+      focus: (target) => this.focus(target),
     };
     const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer = renderer;
@@ -836,8 +843,9 @@ export class OfficeScene {
     this.layout();
     for (const desk of cheered) this.fx.burst(desk.seat(V2), desk.scale, t);
     this.syncEffects();
-    if (this.focusId !== null && !this.focusable(this.focusId)) this.focus(null);
-    if (this.pendingHash !== null && this.focusable(this.pendingHash)) this.focus(this.pendingHash);
+    if (this.focused !== null && !this.focusable(this.focused)) this.focus(null);
+    const pending = focusFromHash(this.snapshot.rooms, this.pendingHash);
+    if (pending !== null) this.focus(pending);
     this.labelsDirty = true;
     this.requestRender();
   }
@@ -846,15 +854,18 @@ export class OfficeScene {
    * Glide to a room or a pod (a tmux session), or to the whole office with
    * `null`. Mirrors the choice in the URL hash.
    */
-  focus(id: string | null): void {
+  focus(target: Focus | null): void {
     if (this.disposed) return;
-    this.focusId = id !== null && this.focusable(id) ? id : null;
+    this.focused = target !== null && this.focusable(target) ? target : null;
     this.pendingHash = null;
     this.userMoved = false;
     const url = new URL(window.location.href);
-    url.hash = this.focusId === null ? '' : encodeURIComponent(this.focusId);
+    url.hash =
+      this.focused === null
+        ? ''
+        : encodeURIComponent(focusHash(this.snapshot.rooms, this.focused)).replace(/%3A/g, ':');
     if (url.href !== window.location.href) window.history.replaceState(null, '', url);
-    this.callbacks.onFocus(this.focusId);
+    this.callbacks.onFocus(this.focused);
     this.applyFocus(true);
   }
 
@@ -1058,8 +1069,8 @@ export class OfficeScene {
     if (!this.userMoved) this.applyFocus(animate);
   }
 
-  private focusable(id: string): boolean {
-    return this.rooms.has(id) || this.podIndex.has(id);
+  private focusable(target: Focus): boolean {
+    return target.kind === 'room' ? this.rooms.has(target.id) : this.podIndex.has(target.id);
   }
 
   private overviewBounds(): Bounds {
@@ -1068,9 +1079,11 @@ export class OfficeScene {
   }
 
   private focusBounds(): Bounds {
-    const id = this.focusId;
+    const target = this.focused;
     const rect =
-      this.plan.rooms.find((r) => r.id === id) ?? (id !== null ? this.podIndex.get(id) : undefined);
+      target?.kind === 'room'
+        ? this.plan.rooms.find((r) => r.id === target.id)
+        : target && this.podIndex.get(target.id);
     if (!rect) return this.overviewBounds();
     // A pod is framed with a little of the floor around it.
     const pad = 'pinned' in rect ? 0.5 : 0;
@@ -1289,9 +1302,10 @@ export class OfficeScene {
   };
 
   private readonly onHashChange = (): void => {
-    const id = readHash();
-    if (id === null || this.focusable(id)) this.focus(id);
-    else this.pendingHash = id;
+    const hash = readHash();
+    const target = focusFromHash(this.snapshot.rooms, hash);
+    if (hash === null || target !== null) this.focus(target);
+    else this.pendingHash = hash;
   };
 
   private readonly forwardWheel = (e: WheelEvent): void => {

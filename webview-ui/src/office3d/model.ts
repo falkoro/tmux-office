@@ -50,6 +50,30 @@ export const NO_PANE_POD_TITLE = 'No tmux';
 
 export type OfficeConfig = Pick<OfficeRooms, 'rooms' | 'pinned' | 'background'>;
 
+/** What the camera frames: a room, or one session's pod. Rooms and sessions can share a name. */
+export interface Focus {
+  kind: 'room' | 'pod';
+  id: string;
+}
+
+/** Session names never contain ':', so this prefix cannot be part of one. */
+const SESSION_HASH = 'session:';
+
+/** A focus as a URL hash: its name, or `session:<name>` for a session named like a room. */
+export function focusHash(rooms: readonly RoomModel[], focus: Focus): string {
+  return focus.kind === 'pod' && rooms.some((r) => r.id === focus.id)
+    ? SESSION_HASH + focus.id
+    : focus.id;
+}
+
+/** What a URL hash names in these rooms, a room before a session; null when it is not here. */
+export function focusFromHash(rooms: readonly RoomModel[], hash: string | null): Focus | null {
+  if (hash === null) return null;
+  if (rooms.some((r) => r.id === hash)) return { kind: 'room', id: hash };
+  const id = hash.startsWith(SESSION_HASH) ? hash.slice(SESSION_HASH.length) : hash;
+  return rooms.some((r) => r.pods.some((p) => p.id === id)) ? { kind: 'pod', id } : null;
+}
+
 export const roomDesks = (room: RoomModel): DeskModel[] => room.pods.flatMap((pod) => pod.desks);
 
 export const STATUS_TEXT: Record<DeskStatus, string> = {

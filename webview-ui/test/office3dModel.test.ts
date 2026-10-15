@@ -15,6 +15,9 @@ import {
   BACKGROUND_ROOM_ID,
   deriveOffice,
   deskStatus,
+  type Focus,
+  focusFromHash,
+  focusHash,
   NO_PANE_POD_ID,
   roomDesks,
   roomHeat,
@@ -414,6 +417,37 @@ describe('3D agent removal', () => {
       desks.map((d) => d.agentId),
       [1],
     );
+  });
+});
+
+describe('focus hash', () => {
+  // The session `work` lands in misc, next to a room that is also called work.
+  const office = deriveOffice(
+    [char(1), char(2)],
+    { 1: { name: 'a', tmux: pane('work-1') }, 2: { name: 'b', tmux: pane('work', '@1', '%2') } },
+    {},
+    cfg([
+      { name: 'work', patterns: ['work-*'] },
+      { name: 'misc', patterns: ['*'] },
+    ]),
+  );
+
+  test('names a room by its name and a session by its name', () => {
+    assert.deepEqual(focusFromHash(office, 'work'), { kind: 'room', id: 'work' });
+    assert.deepEqual(focusFromHash(office, 'work-1'), { kind: 'pod', id: 'work-1' });
+    assert.equal(focusHash(office, { kind: 'pod', id: 'work-1' }), 'work-1');
+    assert.equal(focusFromHash(office, 'gone'), null);
+  });
+
+  test('round-trips a session that shares its name with a room', () => {
+    const targets: Focus[] = [
+      { kind: 'room', id: 'work' },
+      { kind: 'pod', id: 'work' },
+      { kind: 'pod', id: 'work-1' },
+    ];
+    for (const focus of targets) {
+      assert.deepEqual(focusFromHash(office, focusHash(office, focus)), focus);
+    }
   });
 });
 

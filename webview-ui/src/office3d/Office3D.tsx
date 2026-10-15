@@ -8,7 +8,7 @@ import { OFFICE3D_POLL_MS, OFFICE3D_STATUS_COLORS } from '../constants.js';
 import type { AgentTerminalMeta } from '../hooks/useExtensionMessages.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import type { ToolActivity } from '../office/types.js';
-import type { RoomModel } from './model.js';
+import type { Focus, RoomModel } from './model.js';
 import { BACKGROUND_ROOM_ID, deriveOffice, roomHeat } from './model.js';
 import { OfficeScene } from './scene.js';
 
@@ -28,14 +28,17 @@ const STATUS_VARS = Object.fromEntries(
 ) as CSSProperties;
 
 /** The room whose pods the bar lists: the focused room, the focused pod's room, or the only room. */
-function barRoom(rooms: RoomModel[], focused: string | null): RoomModel | undefined {
+function barRoom(rooms: RoomModel[], focused: Focus | null): RoomModel | undefined {
   const grid = rooms.filter((r) => r.id !== BACKGROUND_ROOM_ID);
   return (
-    rooms.find((r) => r.id === focused) ??
-    rooms.find((r) => r.pods.some((p) => p.id === focused)) ??
-    (grid.length === 1 ? grid[0] : undefined)
+    rooms.find((r) =>
+      focused?.kind === 'room' ? r.id === focused.id : r.pods.some((p) => p.id === focused?.id),
+    ) ?? (grid.length === 1 ? grid[0] : undefined)
   );
 }
+
+const isFocused = (focused: Focus | null, kind: Focus['kind'], id: string): boolean =>
+  focused?.kind === kind && focused.id === id;
 
 /**
  * The 3D office view. OfficeState is mutated in place by the message handler
@@ -48,7 +51,7 @@ export default function Office3D(props: Office3DProps) {
   const latest = useRef(props);
   latest.current = props;
   const [rooms, setRooms] = useState<RoomModel[]>([]);
-  const [focused, setFocused] = useState<string | null>(null);
+  const [focused, setFocused] = useState<Focus | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -115,10 +118,10 @@ export default function Office3D(props: Office3DProps) {
             key={r.id}
             type="button"
             className="o3d-bar-btn"
-            aria-pressed={focused === r.id}
+            aria-pressed={isFocused(focused, 'room', r.id)}
             data-heat={roomHeat(r) ?? 'calm'}
             data-pinned={r.pods.some((pod) => pod.pinned) || undefined}
-            onClick={() => sceneRef.current?.focus(r.id)}
+            onClick={() => sceneRef.current?.focus({ kind: 'room', id: r.id })}
           >
             {r.title}
           </button>
@@ -129,10 +132,10 @@ export default function Office3D(props: Office3DProps) {
             key={`pod:${pod.id}`}
             type="button"
             className="o3d-bar-btn o3d-bar-pod"
-            aria-pressed={focused === pod.id}
+            aria-pressed={isFocused(focused, 'pod', pod.id)}
             data-heat={roomHeat({ id: pod.id, title: pod.title, pods: [pod] }) ?? 'calm'}
             data-pinned={pod.pinned || undefined}
-            onClick={() => sceneRef.current?.focus(pod.id)}
+            onClick={() => sceneRef.current?.focus({ kind: 'pod', id: pod.id })}
           >
             {pod.title}
           </button>

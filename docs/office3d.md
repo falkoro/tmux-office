@@ -40,7 +40,7 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - A label is as wide as its own desk's pitch on screen, measured from that desk's depth, so the back row's narrower labels never overlap their neighbours. Names are never cut. A long name wraps at its hyphens.
 - On a phone the roster has two columns in floor that `planOffice` reserves in front of the pods.
 - The room bar lists the rooms. When one room is focused, or there is only one, it also lists that room's pods.
-- `#emperor` focuses the room. `#emperor-8` focuses the pod. The hash follows back and forward.
+- `#work` focuses the room. `#work-8` focuses the pod. A room wins a name it shares with a session, so that session is `#session:work`. The hash follows back and forward.
 - A click picks the nearest desk or helper with a ray against boxes. It dismisses the bubble, toggles selection and calls `App.handleClick`, so the terminal panel opens as in the 2D view. Sub-agents route to their parent.
 - A drag past 6 px or a wheel counts as steering. A click does not freeze the auto-fit.
 
