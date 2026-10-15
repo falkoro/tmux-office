@@ -2,16 +2,12 @@ import { execFile } from 'node:child_process';
 import { createSign, generateKeyPairSync } from 'node:crypto';
 import { promisify } from 'node:util';
 
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
 
 import { accessCertsUrl, createAccessVerifier, type JwksDocument } from '../src/accessJwt.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
 import { createHttpServer, type HttpServerHandle } from '../src/httpServer.js';
-import { ClaudeSessionRegistry } from '../src/providers/hook/claude/claudeSessionRegistry.js';
 import { buildAttachArgv } from '../src/tmuxTerminal.js';
 import type { AgentState } from '../src/types.js';
 
@@ -185,7 +181,6 @@ describe('/ws/term gate', () => {
 describe('/ws/term attach', () => {
   const socketName = `pa-test-${process.pid}-${Date.now()}`;
   let handle: HttpServerHandle | undefined;
-  let homeDir: string | undefined;
   let paneId = '';
   let targetWindowId = '';
   let width = 0;
@@ -213,26 +208,14 @@ describe('/ws/term attach', () => {
     targetWindowId = windowId;
     width = Number(widthRaw);
     height = Number(heightRaw);
+    // `demo`, which a stale registry entry would still name, goes away; only the
+    // location the server followed (agent.tmux) still reaches the pane.
+    await tmux(socketName, ['new-session', '-d', '-s', 'other', '-x', '100', '-y', '30']);
+    await tmux(socketName, ['move-window', '-s', `${session}:${windowId}`, '-t', 'other:']);
 
-    homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-term-'));
-    const sessions = path.join(homeDir, '.claude', 'sessions');
-    fs.mkdirSync(sessions, { recursive: true });
     const sessionId = '22222222-2222-2222-2222-222222222222';
-    fs.writeFileSync(
-      path.join(sessions, '1.json'),
-      JSON.stringify({
-        pid: process.pid,
-        sessionId,
-        cwd: '/tmp/work',
-        tmux: `${session}:${windowId}.${pane}`,
-        status: 'idle',
-        name: 'term-test',
-      }),
-    );
-    const registry = new ClaudeSessionRegistry({ homeDir });
-    registry.refresh();
     const store = new AgentStateStore();
-    store.set(1, bareAgent(sessionId));
+    store.set(1, { ...bareAgent(sessionId), tmux: { session: 'other', windowId, paneId: pane } });
     handle = await createHttpServer({
       embedded: true,
       host: '127.0.0.1',
@@ -240,7 +223,6 @@ describe('/ws/term attach', () => {
       token: 'test-token',
       store,
       insecureLocalTerminal: true,
-      sessionRegistry: registry,
     });
   }, 20_000);
 
@@ -249,10 +231,9 @@ describe('/ws/term attach', () => {
     else process.env.PIXEL_AGENTS_TMUX_SOCKET = previousSocket;
     await handle?.app.close();
     await execFileAsync('tmux', ['-L', socketName, 'kill-server']).catch(() => undefined);
-    if (homeDir) fs.rmSync(homeDir, { recursive: true, force: true });
   });
 
-  it('types into the private pane and removes the throwaway session', async () => {
+  it('types into the followed pane and removes the throwaway session', async () => {
     if (!handle) throw new Error('server did not start');
     const socket = new WebSocket(
       `ws://127.0.0.1:${handle.port}/ws/term?agentId=1&token=test-token&tmux=nope`,

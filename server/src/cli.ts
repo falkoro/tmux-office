@@ -300,7 +300,6 @@ async function main(): Promise<void> {
       onReloadAssets,
       insecureLocalTerminal: args.insecureLocalTerminal,
       access: accessVerifierFromEnv(),
-      sessionRegistry,
       officeFeed,
       officeEmbedOrigins: (process.env.PIXEL_AGENTS_OFFICE_EMBED_ORIGINS ?? '')
         .split(/[\s,]+/)

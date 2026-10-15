@@ -22,7 +22,6 @@ import {
 } from './constants.js';
 import { agentCreatedTerminalFields } from './liveSessionSync.js';
 import type { OfficeFeedState } from './officeFeed.js';
-import type { ClaudeSessionRegistry } from './providers/hook/claude/claudeSessionRegistry.js';
 import { type AttachedTerminal, attachTmuxPane } from './tmuxTerminal.js';
 import type { AgentState } from './types.js';
 
@@ -54,8 +53,6 @@ export interface HttpServerOptions {
   insecureLocalTerminal?: boolean;
   /** When set, every request except hook posts must carry a valid Access JWT. */
   access?: AccessVerifier;
-  /** Live Claude sessions. /ws/term resolves an agent through this map. */
-  sessionRegistry?: ClaudeSessionRegistry;
   /** Serves GET /api/office when set. */
   officeFeed?: OfficeFeedState;
   /** Browser origins allowed to read /api/office. A request without Origin is always allowed. */
@@ -434,7 +431,7 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
   app.get('/ws/term', { websocket: true, onRequest: terminalGate(options) }, (socket, request) => {
     const agentId = terminalAgentId(request.url);
     const agent = agentId === null ? undefined : options.store.get(agentId);
-    const location = agent ? options.sessionRegistry?.get(agent.sessionId)?.tmux : undefined;
+    const location = agent?.tmux;
     if (!agent || !location) {
       safeSend(socket, { type: 'error', message: 'no terminal for this agent' });
       socket.close();
