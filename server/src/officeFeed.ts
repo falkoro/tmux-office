@@ -40,10 +40,10 @@ type Msg = Record<string, unknown>;
 const natural = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 /**
- * A JSON view of the office for pages that cannot speak /ws, such as the
- * house walkthrough. It folds the same broadcasts the webview folds in
- * useExtensionMessages.ts, so a desk here has the status the office shows.
- * Names, sessions and statuses only: tool text and paths never leave.
+ * A JSON view of the office for pages that cannot speak /ws. It folds the
+ * same broadcasts the webview folds in useExtensionMessages.ts, so a desk
+ * here has the status the office shows. Names, sessions and statuses only:
+ * tool text and paths never leave.
  */
 export class OfficeFeedState {
   private readonly desks = new Map<number, Desk>();
@@ -53,6 +53,7 @@ export class OfficeFeedState {
     private readonly tools: FeedToolNames,
   ) {
     store.on('broadcast', (msg) => this.apply(msg));
+    store.on('agentRemoved', (id) => this.desks.delete(id));
   }
 
   private desk(id: number): Desk {
@@ -80,13 +81,11 @@ export class OfficeFeedState {
 
   apply(msg: Msg): void {
     const id = msg.id;
-    if (typeof id !== 'number') return;
+    // Timers can still broadcast for an agent that is gone; that must not revive its desk.
+    if (typeof id !== 'number' || !this.store.has(id)) return;
     const toolId = String(msg.toolId ?? '');
     const parentToolId = String(msg.parentToolId ?? '');
     switch (msg.type) {
-      case 'agentClosed':
-        this.desks.delete(id);
-        return;
       case 'agentToolStart': {
         const desk = this.desk(id);
         const toolName = typeof msg.toolName === 'string' ? msg.toolName : '';

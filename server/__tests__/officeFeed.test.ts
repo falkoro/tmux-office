@@ -141,12 +141,14 @@ describe('OfficeFeedState', () => {
     ]);
   });
 
-  it('forgets closed agents', () => {
+  it('forgets removed agents, so a returning id starts from server state', () => {
     const { store, feed } = setup(agent(1, 'a'));
     store.broadcast({ type: 'agentToolPermission', id: 1 });
     store.delete(1);
-    store.broadcast({ type: 'agentClosed', id: 1 });
-    expect(feed.snapshot(null).desks).toEqual([]);
+    // A delayed broadcast for the removed agent must not bring its desk back.
+    store.broadcast({ type: 'agentToolPermission', id: 1 });
+    store.set(1, agent(1, 'a', { isWaiting: false }));
+    expect(feed.snapshot(null).desks.map((d) => d.status)).toEqual(['working']);
   });
 });
 
