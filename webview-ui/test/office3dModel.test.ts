@@ -103,6 +103,23 @@ describe('deriveOffice', () => {
     assert.equal(rooms[0].title, 'work-2');
   });
 
+  test("an inline teammate in its lead's pane is named by its own agent name", () => {
+    const lead = pane('work-3', '@4', '%7');
+    const chars = [
+      char(1, { folderName: 'repo' }),
+      char(2, { agentName: 'researcher', folderName: 'repo' }),
+    ];
+    const terminals: Record<number, TerminalMeta> = {
+      1: { name: 'zeta-c9', tmux: lead },
+      2: { name: null, tmux: lead },
+    };
+    const desks = roomDesks(deriveOffice(chars, terminals)[0]);
+    assert.deepEqual(
+      desks.map((d) => d.name),
+      ['zeta-c9', 'researcher'],
+    );
+  });
+
   test('orders desks in a room by tmux window', () => {
     const chars = [
       char(1, { tmux: pane('s', '@12') }),

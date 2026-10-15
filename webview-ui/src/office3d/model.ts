@@ -171,7 +171,7 @@ export function deriveOffice(
     }
     const meta = terminals[ch.id];
     const tools = agentTools[ch.id];
-    const name = meta?.name || ch.sessionName || ch.folderName || `Agent ${ch.id}`;
+    const name = meta?.name || ch.agentName || ch.sessionName || ch.folderName || `Agent ${ch.id}`;
     const status = deskStatus({
       bubbleType: ch.bubbleType,
       waitingAwaitingInput: ch.waitingAwaitingInput,
