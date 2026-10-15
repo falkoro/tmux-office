@@ -5,9 +5,9 @@ The 3D office answers two questions at a glance: what is each session doing, and
 ## Model and layout
 
 - `deriveOffice` turns the live `OfficeState` characters into rooms of pods of desks with helpers. It is pure and covered by vitest.
-- `PIXEL_AGENTS_OFFICE_ROOMS` names the rooms. Entries are separated by `;`. `name=glob` puts every matching tmux session in that room, and globs are separated by commas or spaces. `emperor=emperor-*` puts every `emperor-*` session in one room named emperor. An entry without `=` is one room named after that text. A configured room stays even with nobody in it. Without the setting every session is a room.
+- `PIXEL_AGENTS_OFFICE_ROOMS` names the rooms. Entries are separated by `;`. `name=glob` puts every matching tmux session in that room, and globs are separated by commas or spaces. `work=work-*` puts every `work-*` session in one room named work. An entry without `=` is one room named after that text. A configured room stays even with nobody in it. Without the setting every session is a room.
 - A pod is one tmux session. It stands on its own rug with a sign that names it. The sign reads "SESSION" over the session name and draws above every desk label and badge, so the session is what you read first. A standing alert badge from the row in front can slip behind a sign; that desk's label still shows the status.
-- `PIXEL_AGENTS_OFFICE_PINNED=emperor-8` pins sessions. A pinned pod sits alone in the front row of its room, centred. It gets a red rug, brass posts with a rope, and a diamond on its sign.
+- `PIXEL_AGENTS_OFFICE_PINNED=work-8` pins sessions. A pinned pod sits alone in the front row of its room, centred. It gets a red rug, brass posts with a rope, and a diamond on its sign.
 - The Background is a porch behind the rooms, as wide as them. It has smaller desks, a railing and fairy lights. Agents without tmux work there.
 - `PIXEL_AGENTS_OFFICE_BACKGROUND=hide` drops the Background, so only agents in a room are shown.
 - `--live-only` keeps a top-level agent only while its Claude process is in the session registry. Each registry tick reads `tmux list-panes` once and follows a pane by id, so a window moved into another session shows up in that session.

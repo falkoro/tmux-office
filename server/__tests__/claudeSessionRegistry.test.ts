@@ -18,14 +18,14 @@ const deadPid = 2_147_483_646;
 
 describe('parseTmuxLocation', () => {
   it('parses session, window id and pane id', () => {
-    expect(parseTmuxLocation('emperor-6:@12.%12')).toEqual({
-      session: 'emperor-6',
+    expect(parseTmuxLocation('work-6:@12.%12')).toEqual({
+      session: 'work-6',
       windowId: '@12',
       paneId: '%12',
     });
   });
 
-  it.each(['', 'emperor-6', 'emperor-6:12.12', '-bad:@1.%1', 'bad name:@1.%1', 'a;b:@1.%1'])(
+  it.each(['', 'work-6', 'work-6:12.12', '-bad:@1.%1', 'bad name:@1.%1', 'a;b:@1.%1'])(
     'rejects %j',
     (value) => {
       expect(parseTmuxLocation(value)).toBeNull();
@@ -41,7 +41,7 @@ describe('parseSessionFile', () => {
       pid: 7951,
       sessionId: '44325277-1111-1111-1111-111111111111',
       cwd: '/home/me/repos/reddit-fetch',
-      tmux: 'emperor-6:@12.%12',
+      tmux: 'work-6:@12.%12',
       status: 'idle',
       name: 'reddit-fetch-88',
       extra: { secret: 'nope' },
@@ -51,7 +51,7 @@ describe('parseSessionFile', () => {
       sessionId: '44325277-1111-1111-1111-111111111111',
       configDir,
       cwd: '/home/me/repos/reddit-fetch',
-      tmux: { session: 'emperor-6', windowId: '@12', paneId: '%12' },
+      tmux: { session: 'work-6', windowId: '@12', paneId: '%12' },
       status: 'idle',
       name: 'reddit-fetch-88',
     });

@@ -29,8 +29,8 @@ function setup(...agents: AgentState[]) {
 
 const rooms = {
   type: 'officeRooms' as const,
-  rooms: [{ name: 'emperor', patterns: ['emperor-*'] }],
-  pinned: ['emperor-8'],
+  rooms: [{ name: 'work', patterns: ['work-*'] }],
+  pinned: ['work-8'],
   background: false,
 };
 
@@ -114,29 +114,29 @@ describe('OfficeFeedState', () => {
 
   it('places desks in rooms, pins first and hides the background when asked', () => {
     const { feed } = setup(
-      agent(1, 'emperor-10'),
-      agent(2, 'emperor-8'),
-      agent(3, 'emperor-2'),
+      agent(1, 'work-10'),
+      agent(2, 'work-8'),
+      agent(3, 'work-2'),
       agent(4, 'scratch'),
       agent(5, null),
     );
     expect(feed.snapshot(rooms).desks.map((d) => [d.session, d.room, d.pinned])).toEqual([
-      ['emperor-8', 'emperor', true],
-      ['emperor-2', 'emperor', false],
-      ['emperor-10', 'emperor', false],
+      ['work-8', 'work', true],
+      ['work-2', 'work', false],
+      ['work-10', 'work', false],
     ]);
     expect(feed.snapshot({ ...rooms, background: true }).desks.map((d) => d.room)).toEqual([
-      'emperor',
-      'emperor',
-      'emperor',
+      'work',
       null,
+      'work',
+      'work',
       null,
     ]);
     expect(feed.snapshot(null).desks.map((d) => d.room)).toEqual([
-      'emperor-2',
-      'emperor-8',
-      'emperor-10',
       'scratch',
+      'work-2',
+      'work-8',
+      'work-10',
       null,
     ]);
   });
@@ -160,7 +160,7 @@ describe('GET /api/office', () => {
   });
 
   async function start(officeEmbedOrigins: string[]) {
-    const { store, feed } = setup(agent(1, 'emperor-8', { isWaiting: false }));
+    const { store, feed } = setup(agent(1, 'work-8', { isWaiting: false }));
     handle = await createHttpServer({
       embedded: true,
       host: '127.0.0.1',
@@ -178,7 +178,7 @@ describe('GET /api/office', () => {
     for (const headers of [{}, { origin: 'http://127.0.0.1:8820' }]) {
       const res = await app.inject({ method: 'GET', url: '/api/office', headers });
       expect(res.statusCode).toBe(200);
-      expect(res.json().desks[0]).toMatchObject({ session: 'emperor-8', status: 'working' });
+      expect(res.json().desks[0]).toMatchObject({ session: 'work-8', status: 'working' });
     }
   });
 
@@ -190,7 +190,7 @@ describe('GET /api/office', () => {
       headers: { origin: 'https://evil.example' },
     });
     expect(res.statusCode).toBe(403);
-    expect(res.body).not.toContain('emperor-8');
+    expect(res.body).not.toContain('work-8');
   });
 
   it('never leaks tool text or paths', async () => {

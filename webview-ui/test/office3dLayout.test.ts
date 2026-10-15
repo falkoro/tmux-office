@@ -36,9 +36,9 @@ const rooms = (count: number, desks = 2): RoomModel[] =>
 /** The demo rig: eight sessions in one room with the last pinned, two lone rooms, one porch agent. */
 const demo = (): RoomModel[] => [
   room(
-    'emperor',
-    pod('emperor-8', 1, true),
-    ...[2, 1, 1, 5, 1, 2, 1].map((n, i) => pod(`emperor-${i + 1}`, n)),
+    'work',
+    pod('work-8', 1, true),
+    ...[2, 1, 1, 5, 1, 2, 1].map((n, i) => pod(`work-${i + 1}`, n)),
   ),
   room('ops', pod('ops', 1)),
   room('scratch', pod('scratch', 1)),
@@ -111,7 +111,7 @@ describe('planOffice', () => {
       assertSound(plan, `demo at ${aspect.toFixed(2)}`);
       assert.deepEqual(
         plan.rooms.map((r) => r.id),
-        ['emperor', 'ops', 'scratch', BACKGROUND_ROOM_ID],
+        ['work', 'ops', 'scratch', BACKGROUND_ROOM_ID],
       );
       assert.equal(plan.rooms[0].pods.length, 8);
       assert.equal(plan.rooms[0].desks.length, 14);
@@ -120,21 +120,21 @@ describe('planOffice', () => {
 
   test('the pinned pod sits front and centre in its room', () => {
     for (const aspect of [DESKTOP, PHONE]) {
-      const emperor = planOffice(demo(), aspect).rooms[0];
-      const pinned = emperor.pods.find((p) => p.pinned);
+      const work = planOffice(demo(), aspect).rooms[0];
+      const pinned = work.pods.find((p) => p.pinned);
       assert.ok(pinned);
-      assert.equal(pinned.id, 'emperor-8');
-      assert.ok(Math.abs(pinned.x - emperor.x) < 1e-9, 'pinned pod is centred');
-      assert.equal(pinned.z, front(emperor), 'pinned pod is in the front row');
-      for (const other of emperor.pods) {
+      assert.equal(pinned.id, 'work-8');
+      assert.ok(Math.abs(pinned.x - work.x) < 1e-9, 'pinned pod is centred');
+      assert.equal(pinned.z, front(work), 'pinned pod is in the front row');
+      for (const other of work.pods) {
         if (other !== pinned) assert.ok(other.z < pinned.z, `${other.id} is behind the pinned pod`);
       }
     }
   });
 
   test('pods keep their order, back to front and left to right', () => {
-    const emperor = planOffice(demo(), DESKTOP).rooms[0];
-    const unpinned = emperor.pods.filter((p) => !p.pinned);
+    const work = planOffice(demo(), DESKTOP).rooms[0];
+    const unpinned = work.pods.filter((p) => !p.pinned);
     for (let i = 1; i < unpinned.length; i++) {
       const [a, b] = [unpinned[i - 1], unpinned[i]];
       const [fa, fb] = [a.z + a.depth / 2, b.z + b.depth / 2];

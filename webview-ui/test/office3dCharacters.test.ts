@@ -71,7 +71,7 @@ describe('default character', () => {
 describe('character choice', () => {
   test('a pick survives a reload and the default clears it', () => {
     const store = memoryStore();
-    const name = 'emperor-8';
+    const name = 'work-8';
     const other = CHARACTER_KINDS.find((k) => k !== defaultCharacterKind(name));
     assert.ok(other);
     assert.equal(loadCharacter(name, store), defaultCharacterKind(name));

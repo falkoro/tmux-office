@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Demo office for UI work and screenshots: a private tmux server and a throwaway HOME
-# shaped like emperor's live sessions. It never touches the default tmux server or ~/.claude*.
-# Rooms follow PIXEL_AGENTS_OFFICE_ROOMS (default emperor=emperor-*; set it empty for one room per session)
-# and pins follow PIXEL_AGENTS_OFFICE_PINNED (default emperor-8).
+# with sessions spread over several rooms. It never touches the default tmux server or ~/.claude*.
+# Rooms follow PIXEL_AGENTS_OFFICE_ROOMS (default work=work-*; set it empty for one room per session)
+# and pins follow PIXEL_AGENTS_OFFICE_PINNED (default work-8).
 #
 #   scripts/office-demo-rig.sh start [name] [port]   prints the office URL
 #   scripts/office-demo-rig.sh stop  [name]
@@ -17,23 +17,23 @@ root="${PA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 # session|window name|config dir|state|cols|rows
 agents=(
-  "emperor-1|api-refactor-e9|.claude-work|working|237|58"
-  "emperor-1|release-notes-1d|.claude-work|done|237|58"
-  "emperor-2|triage-c9|.claude-side|permission|237|58"
-  "emperor-3|checkout-flow-5c|.claude-client|working|237|58"
-  "emperor-5|design-review-13|.claude-ops|asking|237|58"
-  "emperor-6|bug-hunt-3b|.claude|subagent|237|58"
-  "emperor-6|reddit-fetch-88|.claude|done|80|24"
-  "emperor-7|temple-trim-7a|.claude|working|80|24"
-  "emperor-8|on-call-b4|.claude|working|80|24"
+  "work-1|api-refactor-e9|.claude-work|working|237|58"
+  "work-1|release-notes-1d|.claude-work|done|237|58"
+  "work-2|triage-c9|.claude-side|permission|237|58"
+  "work-3|checkout-flow-5c|.claude-client|working|237|58"
+  "work-5|design-review-13|.claude-ops|asking|237|58"
+  "work-6|bug-hunt-3b|.claude|subagent|237|58"
+  "work-6|reddit-fetch-88|.claude|done|80|24"
+  "work-7|temple-trim-7a|.claude|working|80|24"
+  "work-8|on-call-b4|.claude|working|80|24"
   "ops|deploy-watch-21|.claude|working|80|24"
   "scratch|try-vite-02|.claude|done|80|24"
   "-|nightly-digest|.claude|working|0|0"
-  "emperor-4|reviewer-api-3f|.claude-client|working|237|58"
-  "emperor-4|reviewer-web-8a|.claude-client|done|237|58"
-  "emperor-4|docs-sweep-41|.claude|working|80|24"
-  "emperor-4|ci-babysit-d2|.claude|permission|80|24"
-  "emperor-4|ux-notes-77|.claude|asking|80|24"
+  "work-4|reviewer-api-3f|.claude-client|working|237|58"
+  "work-4|reviewer-web-8a|.claude-client|done|237|58"
+  "work-4|docs-sweep-41|.claude|working|80|24"
+  "work-4|ci-babysit-d2|.claude|permission|80|24"
+  "work-4|ux-notes-77|.claude|asking|80|24"
 )
 tools=(Read Grep Edit Bash Glob Write WebFetch)
 targets=(server/src/httpServer.ts useExtensionMessages webview-ui/src/App.tsx "npm test" "**/*.tsx" docs/notes.md https://example.com)
@@ -112,8 +112,8 @@ start_rig() {
   done
 
   (HOME="$dir/home" PIXEL_AGENTS_TMUX_SOCKET="$sock" \
-    PIXEL_AGENTS_OFFICE_ROOMS="${PIXEL_AGENTS_OFFICE_ROOMS-emperor=emperor-*}" \
-    PIXEL_AGENTS_OFFICE_PINNED="${PIXEL_AGENTS_OFFICE_PINNED-emperor-8}" nohup node "$root/dist/cli.js" \
+    PIXEL_AGENTS_OFFICE_ROOMS="${PIXEL_AGENTS_OFFICE_ROOMS-work=work-*}" \
+    PIXEL_AGENTS_OFFICE_PINNED="${PIXEL_AGENTS_OFFICE_PINNED-work-8}" nohup node "$root/dist/cli.js" \
     --port "$port" --host 127.0.0.1 --watch-all --live-only --insecure-local-terminal > "$dir/server.log" 2>&1 &
     echo $! > "$dir/server.pid")
   for _ in $(seq 1 40); do

@@ -25,20 +25,20 @@ import {
 
 const execFileAsync = promisify(execFile);
 
-const movedPane: TmuxPaneRecord = { paneId: '%5', session: 'emperor-5', windowId: '@9' };
-const registryTmux: TmuxLocation = { session: 'emperor-3', windowId: '@5', paneId: '%5' };
+const movedPane: TmuxPaneRecord = { paneId: '%5', session: 'work-5', windowId: '@9' };
+const registryTmux: TmuxLocation = { session: 'work-3', windowId: '@5', paneId: '%5' };
 
 describe('resolveLiveTmuxLocations', () => {
   const sessions = [{ sessionId: 's1', tmux: registryTmux }];
 
   it('follows a pane that moved to another session', () => {
     const locations = resolveLiveTmuxLocations(sessions, [movedPane]);
-    expect(locations.get('s1')).toEqual({ session: 'emperor-5', windowId: '@9', paneId: '%5' });
+    expect(locations.get('s1')).toEqual({ session: 'work-5', windowId: '@9', paneId: '%5' });
   });
 
   it('clears the location when the pane is gone', () => {
     const locations = resolveLiveTmuxLocations(sessions, [
-      { paneId: '%9', session: 'emperor-5', windowId: '@9' },
+      { paneId: '%9', session: 'work-5', windowId: '@9' },
     ]);
     expect(locations.get('s1')).toBeNull();
   });
@@ -65,7 +65,7 @@ describe('resolveLiveTmuxLocations', () => {
 
 describe('tmux pane list', () => {
   it('parses pane id, session name, and window id', () => {
-    expect(parseTmuxPaneList('%5 emperor-5 @9\n%1 demo @1\n')).toEqual([
+    expect(parseTmuxPaneList('%5 work-5 @9\n%1 demo @1\n')).toEqual([
       movedPane,
       { paneId: '%1', session: 'demo', windowId: '@1' },
     ]);
@@ -104,13 +104,13 @@ describe('tmux pane list', () => {
     try {
       await execFileAsync(
         'tmux',
-        ['-L', socketName, 'new-session', '-d', '-s', 'emperor-5', '-x', '80', '-y', '24'],
+        ['-L', socketName, 'new-session', '-d', '-s', 'work-5', '-x', '80', '-y', '24'],
         { timeout: 4000 },
       );
       const identity = (
         await execFileAsync(
           'tmux',
-          ['-L', socketName, 'display-message', '-p', '-t', 'emperor-5', '#{pane_id} #{window_id}'],
+          ['-L', socketName, 'display-message', '-p', '-t', 'work-5', '#{pane_id} #{window_id}'],
           { timeout: 4000 },
         )
       ).stdout
@@ -120,7 +120,7 @@ describe('tmux pane list', () => {
       const windowId = identity[1];
       expect(paneId).toMatch(/^%\d+$/);
       expect(windowId).toMatch(/^@\d+$/);
-      await expect(listTmuxPanes()).resolves.toEqual([{ paneId, session: 'emperor-5', windowId }]);
+      await expect(listTmuxPanes()).resolves.toEqual([{ paneId, session: 'work-5', windowId }]);
     } finally {
       if (previous === undefined) delete process.env.PIXEL_AGENTS_TMUX_SOCKET;
       else process.env.PIXEL_AGENTS_TMUX_SOCKET = previous;
@@ -174,7 +174,7 @@ describe('live pane following', () => {
   it('broadcasts agentTerminal when a pane moves to another session', async () => {
     vi.useFakeTimers();
     const root = tempDir();
-    const registry = writeSession(root, 'emperor-3:@5.%5');
+    const registry = writeSession(root, 'work-3:@5.%5');
     const store = new AgentStateStore();
     const messages: Record<string, unknown>[] = [];
     store.on('broadcast', (message) => messages.push(message));
@@ -184,13 +184,13 @@ describe('live pane following', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     const agent = [...store.values()][0];
-    expect(agent?.tmux).toEqual({ session: 'emperor-5', windowId: '@9', paneId: '%5' });
+    expect(agent?.tmux).toEqual({ session: 'work-5', windowId: '@9', paneId: '%5' });
     const terminals = messages.filter((message) => message.type === 'agentTerminal');
     expect(terminals.at(-1)).toEqual({
       type: 'agentTerminal',
       id: agent?.id,
       name: 'zeta',
-      tmux: { session: 'emperor-5', windowId: '@9', paneId: '%5' },
+      tmux: { session: 'work-5', windowId: '@9', paneId: '%5' },
     });
   });
 
@@ -215,12 +215,12 @@ describe('live pane following', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(store.size).toBe(0);
 
-    writeSession(root, 'emperor-3:@5.%5');
+    writeSession(root, 'work-3:@5.%5');
     vi.advanceTimersByTime(CLAUDE_SESSION_POLL_INTERVAL_MS);
 
     expect(calls).toBe(2);
     expect([...store.values()][0]?.tmux).toEqual({
-      session: 'emperor-5',
+      session: 'work-5',
       windowId: '@9',
       paneId: '%5',
     });
@@ -231,7 +231,7 @@ describe('live pane following', () => {
   it('restores the registry location when a later pane list fails', async () => {
     vi.useFakeTimers();
     const root = tempDir();
-    const registry = writeSession(root, 'emperor-3:@5.%5');
+    const registry = writeSession(root, 'work-3:@5.%5');
     const results: Array<readonly TmuxPaneRecord[] | null> = [[movedPane], null];
     const listPanes = (): Promise<readonly TmuxPaneRecord[] | null> =>
       Promise.resolve(results.length > 0 ? (results.shift() ?? null) : null);
@@ -240,7 +240,7 @@ describe('live pane following', () => {
     runtime.forceWatchAll = true;
     runtime.startLiveSessionRegistry(registry, listPanes);
     await vi.advanceTimersByTimeAsync(0);
-    expect([...store.values()][0]?.tmux?.session).toBe('emperor-5');
+    expect([...store.values()][0]?.tmux?.session).toBe('work-5');
 
     await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
     expect([...store.values()][0]?.tmux).toEqual(registryTmux);

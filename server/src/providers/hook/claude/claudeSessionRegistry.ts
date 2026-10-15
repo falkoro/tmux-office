@@ -11,7 +11,7 @@ import {
 
 /** Where a live Claude process sits inside tmux. Ids keep their sigils. */
 export interface TmuxLocation {
-  /** Session name, for example `emperor-6`. */
+  /** Session name, for example `work-6`. */
   session: string;
   /** Window id including `@`, for example `@12`. */
   windowId: string;
@@ -35,7 +35,7 @@ export interface LiveClaudeSession {
 const TMUX_LOCATION = /^(.+):(@\d+)\.(%\d+)$/;
 
 /**
- * Parse `emperor-6:@12.%12`. A session name that could be read as a tmux flag
+ * Parse `work-6:@12.%12`. A session name that could be read as a tmux flag
  * or command separator is rejected so it can never be passed through to argv.
  */
 export function parseTmuxLocation(value: string): TmuxLocation | null {

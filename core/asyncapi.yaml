@@ -255,7 +255,7 @@ components:
       properties:
         session:
           type: string
-          description: tmux session name, for example emperor-6.
+          description: tmux session name, for example work-6.
         windowId:
           type: string
           description: tmux window id including the leading @.
