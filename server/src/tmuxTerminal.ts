@@ -3,7 +3,6 @@ import { randomBytes } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import type { IPty } from 'node-pty';
-import * as pty from 'node-pty';
 
 import { TERM_SIZE_POLL_INTERVAL_MS } from './constants.js';
 import type { TmuxLocation } from './providers/hook/claude/claudeSessionRegistry.js';
@@ -213,7 +212,10 @@ export async function attachTmuxPane(
     cols: FALLBACK_COLS,
     rows: FALLBACK_ROWS,
   };
-  const term = pty.spawn('tmux', buildAttachArgv(location, sessionName), {
+  // Loaded here, not at the top: the VS Code extension bundles this module and
+  // must load on hosts where node-pty's native build is missing.
+  const { spawn } = await import('node-pty');
+  const term = spawn('tmux', buildAttachArgv(location, sessionName), {
     name: 'xterm-256color',
     cols: size.cols,
     rows: size.rows,
