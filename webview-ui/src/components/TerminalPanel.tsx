@@ -23,6 +23,8 @@ export interface TerminalPanelProps {
   agentId: number;
   name: string | null;
   tmux: TerminalPanelLocation;
+  /** Main transport reconnects so far; each one reopens the terminal socket. */
+  reconnects: number;
   onClose: () => void;
 }
 
@@ -65,7 +67,7 @@ function fitTerminalFont(term: Terminal, host: HTMLElement, cols: number, rows: 
  * Browser terminal for one agent's tmux pane. The server chooses the cols and
  * rows; the font is scaled so that grid fills this panel.
  */
-export function TerminalPanel({ agentId, name, tmux, onClose }: TerminalPanelProps) {
+export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: TerminalPanelProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [disconnected, setDisconnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +146,7 @@ export function TerminalPanel({ agentId, name, tmux, onClose }: TerminalPanelPro
       socket.close();
       term.dispose();
     };
-  }, [agentId, tmux.session, tmux.windowId, tmux.paneId]);
+  }, [agentId, tmux.session, tmux.windowId, tmux.paneId, reconnects]);
 
   const target = `${tmux.session}:${tmux.windowId}.${tmux.paneId}`;
   return (

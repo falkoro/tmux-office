@@ -1266,6 +1266,7 @@ export class OfficeScene {
   private layout(): void {
     const animate = this.planKey !== '';
     this.plan = planOffice(this.snapshot.rooms, this.camera.aspect);
+    this.labels.domElement.dataset.narrow = String(this.plan.narrow);
     for (const spot of this.plan.rooms) {
       this.rooms.get(spot.id)?.place(spot);
       for (const d of spot.desks) this.desks.get(d.agentId)?.place(d, spot.background);

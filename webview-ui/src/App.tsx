@@ -6,6 +6,7 @@ import { ChangelogModal } from './components/ChangelogModal.js';
 import { ConnectionIndicator } from './components/ConnectionIndicator.js';
 import { DebugView } from './components/DebugView.js';
 import { EditActionBar } from './components/EditActionBar.js';
+import { FallbackBoundary } from './components/FallbackBoundary.js';
 import { IntroBubble } from './components/IntroBubble.js';
 import { MigrationNotice } from './components/MigrationNotice.js';
 import { SettingsModal } from './components/SettingsModal.js';
@@ -31,6 +32,7 @@ import { EditTool, type OfficeLayout } from './office/types.js';
 import { isBrowserRuntime, isE2E } from './runtime.js';
 import { installTestHooks } from './testHooks.js';
 import { transport } from './transport/index.js';
+import { onReconnect } from './transport/onReconnect.js';
 
 // Game state lives outside React — updated imperatively by message handlers
 const officeStateRef = { current: null as OfficeState | null };
@@ -118,6 +120,8 @@ function App() {
   const [isHooksInfoOpen, setIsHooksInfoOpen] = useState(false);
   const [hooksTooltipDismissed, setHooksTooltipDismissed] = useState(false);
   const [isDebugMode, setIsDebugMode] = useState(false);
+  const [reconnects, setReconnects] = useState(0);
+  useEffect(() => onReconnect(transport, () => setReconnects((n) => n + 1)), []);
   const [alwaysShowOverlay, setAlwaysShowOverlay] = useState(false);
 
   const currentMajorMinor = toMajorMinor(extensionVersion);
@@ -363,6 +367,27 @@ function App() {
   // The layout editor and the first-run tour are drawn on the pixel office.
   const show3D = prefer3D && !editor.isEditMode && !intro;
 
+  const pixelOffice = (
+    <OfficeCanvas
+      officeState={officeState}
+      onClick={handleClick}
+      isEditMode={editor.isEditMode}
+      editorState={editorState}
+      onEditorTileAction={editor.handleEditorTileAction}
+      onEditorEraseAction={editor.handleEditorEraseAction}
+      onEditorSelectionChange={editor.handleEditorSelectionChange}
+      onDeleteSelected={editor.handleDeleteSelected}
+      onRotateSelected={editor.handleRotateSelected}
+      onDragMove={editor.handleDragMove}
+      editorTick={editor.editorTick}
+      zoom={editor.zoom}
+      onZoomChange={editor.handleZoomChange}
+      panRef={editor.panRef}
+      showAreas={effectiveShowAreas}
+      activeAreaLabel={activeAreaLabel}
+    />
+  );
+
   return (
     <div
       className={showTerminal ? 'office-shell' : 'w-full h-full'}
@@ -373,34 +398,19 @@ function App() {
         className={showTerminal ? 'office-stage' : 'w-full h-full relative overflow-hidden'}
       >
         {show3D ? (
-          <Suspense fallback={null}>
-            <Office3D
-              officeState={officeState}
-              agentTerminals={agentTerminals}
-              agentTools={agentTools}
-              officeRooms={officeRooms}
-              onClick={handleClick}
-            />
-          </Suspense>
+          <FallbackBoundary fallback={pixelOffice}>
+            <Suspense fallback={null}>
+              <Office3D
+                officeState={officeState}
+                agentTerminals={agentTerminals}
+                agentTools={agentTools}
+                officeRooms={officeRooms}
+                onClick={handleClick}
+              />
+            </Suspense>
+          </FallbackBoundary>
         ) : (
-          <OfficeCanvas
-            officeState={officeState}
-            onClick={handleClick}
-            isEditMode={editor.isEditMode}
-            editorState={editorState}
-            onEditorTileAction={editor.handleEditorTileAction}
-            onEditorEraseAction={editor.handleEditorEraseAction}
-            onEditorSelectionChange={editor.handleEditorSelectionChange}
-            onDeleteSelected={editor.handleDeleteSelected}
-            onRotateSelected={editor.handleRotateSelected}
-            onDragMove={editor.handleDragMove}
-            editorTick={editor.editorTick}
-            zoom={editor.zoom}
-            onZoomChange={editor.handleZoomChange}
-            panRef={editor.panRef}
-            showAreas={effectiveShowAreas}
-            activeAreaLabel={activeAreaLabel}
-          />
+          pixelOffice
         )}
 
         {!isDebugMode ? (
@@ -664,6 +674,7 @@ function App() {
           agentId={openTerminalId}
           name={openTerminal.name}
           tmux={openTerminal.tmux}
+          reconnects={reconnects}
           onClose={() => {
             setOpenTerminalId(null);
             const os = getOfficeState();

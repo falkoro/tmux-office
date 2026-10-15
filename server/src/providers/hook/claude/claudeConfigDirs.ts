@@ -17,13 +17,14 @@ export function configDirGlobToRegExp(glob: string): RegExp {
   return new RegExp(`^${body}$`);
 }
 
-function isDirectory(parent: string, entry: fs.Dirent): boolean {
+function isDirectory(parent: string, entry: fs.Dirent, previous: readonly string[]): boolean {
   if (entry.isDirectory()) return true;
   if (!entry.isSymbolicLink()) return false;
+  const full = path.join(parent, entry.name);
   try {
-    return fs.statSync(path.join(parent, entry.name)).isDirectory();
-  } catch {
-    return false;
+    return fs.statSync(full).isDirectory();
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code !== 'ENOENT' && previous.includes(full);
   }
 }
 
@@ -33,22 +34,26 @@ function isDirectory(parent: string, entry: fs.Dirent): boolean {
  * Directories only, so a file such as `~/.claude.json` is ignored. Names
  * matching `*.bak-*` (for example `~/.claude.bak-2026-01-01`) are backups,
  * not live config dirs.
+ *
+ * `previous` is the last listing. When the home listing or a symlink's stat
+ * fails for any reason but ENOENT, those dirs are kept rather than dropped.
  */
 export function listClaudeConfigDirs(
   homeDir: string,
   configDirGlob: string = DEFAULT_CLAUDE_CONFIG_DIR_GLOB,
+  previous: readonly string[] = [],
 ): string[] {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(homeDir, { withFileTypes: true });
-  } catch {
-    return [];
+  } catch (err) {
+    return (err as NodeJS.ErrnoException).code === 'ENOENT' ? [] : [...previous];
   }
   const match = configDirGlobToRegExp(configDirGlob);
   const dirs: string[] = [];
   for (const entry of entries) {
     if (!match.test(entry.name) || BAK_DIR.test(entry.name)) continue;
-    if (!isDirectory(homeDir, entry)) continue;
+    if (!isDirectory(homeDir, entry, previous)) continue;
     dirs.push(path.join(homeDir, entry.name));
   }
   dirs.sort((a, b) => path.basename(a).localeCompare(path.basename(b)));

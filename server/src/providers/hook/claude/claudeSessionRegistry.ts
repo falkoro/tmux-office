@@ -108,6 +108,7 @@ export interface ClaudeSessionRegistryOptions {
 export class ClaudeSessionRegistry {
   private readonly sessionsById = new Map<string, LiveClaudeSession>();
   private byFile = new Map<string, LiveClaudeSession>();
+  private configDirs: string[] = [];
 
   constructor(private readonly options: ClaudeSessionRegistryOptions = {}) {}
 
@@ -118,7 +119,8 @@ export class ClaudeSessionRegistry {
     const found = new Map<string, LiveClaudeSession>();
 
     const files: { file: string; configDir: string }[] = [];
-    for (const configDir of listClaudeConfigDirs(homeDir, glob)) {
+    this.configDirs = listClaudeConfigDirs(homeDir, glob, this.configDirs);
+    for (const configDir of this.configDirs) {
       const sessionsDir = path.join(configDir, 'sessions');
       let names: string[];
       try {

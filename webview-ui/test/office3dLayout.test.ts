@@ -120,6 +120,13 @@ describe('planOffice', () => {
     }
   });
 
+  test('the plan names whether it was laid out for a narrow stage', () => {
+    // A 1200x1000 window with the terminal panel open leaves a 660x1000 stage.
+    assert.equal(planOffice(demo(), 660 / 1000).narrow, true);
+    assert.equal(planOffice(demo(), 1200 / 1000).narrow, false);
+    assert.equal(planOffice(demo(), 4 / 5).narrow, false);
+  });
+
   test('the pinned pod sits front and centre in its room', () => {
     for (const aspect of [DESKTOP, PHONE]) {
       const work = planOffice(demo(), aspect).rooms[0];

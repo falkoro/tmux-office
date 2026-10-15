@@ -100,7 +100,9 @@ describe('/ws/term gate', () => {
 
   it('returns 403 when Access is unset and the insecure flag is off', async () => {
     const handle = await listen({});
-    const response = await fetch(`http://127.0.0.1:${handle.port}/ws/term?agentId=1`);
+    const response = await fetch(
+      `http://127.0.0.1:${handle.port}/ws/term?agentId=1&token=test-token`,
+    );
     expect(response.status).toBe(403);
   });
 

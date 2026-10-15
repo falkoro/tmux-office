@@ -123,6 +123,19 @@ describe('createAccessVerifier', () => {
     expect(fetches).toBe(2);
   });
 
+  it('treats a malformed JWKS document as a failed refresh', async () => {
+    const { privateKey } = keyPair();
+    let fetches = 0;
+    const verifier = createAccessVerifier({ teamDomain: TEAM, aud: AUD }, async () => {
+      fetches += 1;
+      return null as unknown as JwksDocument;
+    });
+    const token = sign(privateKey, payload());
+    await expect(verifier.verify(token)).resolves.toEqual({ ok: false });
+    await expect(verifier.verify(token)).resolves.toEqual({ ok: false });
+    expect(fetches).toBe(1);
+  });
+
   it('caps unknown-kid refetches so made-up kids do not fan out to Cloudflare', async () => {
     const { privateKey, jwks } = keyPair();
     let fetches = 0;

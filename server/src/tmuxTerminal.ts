@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { promisify } from 'node:util';
 
-import { TERM_SIZE_POLL_INTERVAL_MS } from './constants.js';
+import { TERM_SIZE_POLL_INTERVAL_MS, TMUX_LIST_PANES_TIMEOUT_MS } from './constants.js';
 import type { TmuxLocation } from './providers/hook/claude/claudeSessionRegistry.js';
 
 const execFileAsync = promisify(execFile);
@@ -14,7 +14,13 @@ const MAX_DIMENSION = 500;
 const FALLBACK_COLS = 80;
 const FALLBACK_ROWS = 24;
 const THROWAWAY_PREFIX = 'pa-web-';
-const THROWAWAY_SESSION = /^pa-web-[0-9a-f]{16}$/;
+const THROWAWAY_ID_BYTES = 8;
+const THROWAWAY_SESSION = new RegExp(`^${THROWAWAY_PREFIX}[0-9a-f]{${THROWAWAY_ID_BYTES * 2}}$`);
+
+/** A fresh name for the grouped session one /ws/term attach creates. */
+export function throwawaySessionName(): string {
+  return `${THROWAWAY_PREFIX}${randomBytes(THROWAWAY_ID_BYTES).toString('hex')}`;
+}
 
 export function tmuxSocketName(): string | undefined {
   const name = process.env.PIXEL_AGENTS_TMUX_SOCKET;
@@ -179,7 +185,9 @@ export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
  */
 export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
   try {
-    const { stdout } = await execFileAsync('tmux', listTmuxPanesArgv(), { timeout: 2000 });
+    const { stdout } = await execFileAsync('tmux', listTmuxPanesArgv(), {
+      timeout: TMUX_LIST_PANES_TIMEOUT_MS,
+    });
     return parseTmuxPaneList(stdout);
   } catch {
     return null;
@@ -230,7 +238,7 @@ export async function attachTmuxPane(
   if (!isSafeTmuxLocation(location)) {
     throw new Error('unsafe tmux location');
   }
-  const sessionName = `${THROWAWAY_PREFIX}${randomBytes(8).toString('hex')}`;
+  const sessionName = throwawaySessionName();
   const size = (await readPaneClientSize(location.paneId)) ?? {
     cols: FALLBACK_COLS,
     rows: FALLBACK_ROWS,

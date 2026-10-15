@@ -92,7 +92,6 @@ export class OfficeFeedState {
         desk.isActive = true;
         if (this.tools.questionTools?.has(toolName)) desk.questions.add(toolId);
         if (!msg.permissionActive && desk.bubbleType === 'permission') desk.bubbleType = null;
-        if (msg.runInBackground) desk.background.add(toolId);
         const parentHasTeam = !!this.store.get(id)?.teamName;
         if (
           this.tools.subagentToolNames.has(toolName) &&
@@ -100,6 +99,7 @@ export class OfficeFeedState {
           (!msg.runInBackground || !parentHasTeam)
         ) {
           this.helper(desk, toolId);
+          if (msg.runInBackground) desk.background.add(toolId);
         }
         return;
       }

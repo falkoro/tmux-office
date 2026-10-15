@@ -157,15 +157,13 @@ export function createAccessVerifier(
       forcedAt = now;
     }
     inflight = fetchJwks(url)
-      .then(
-        (doc) => {
-          keys = keysFromJwks(doc);
-          fetchedAt = Date.now();
-        },
-        () => {
-          failedAt = Date.now();
-        },
-      )
+      .then((doc) => {
+        keys = keysFromJwks(doc);
+        fetchedAt = Date.now();
+      })
+      .catch(() => {
+        failedAt = Date.now();
+      })
       .finally(() => {
         inflight = null;
       });

@@ -57,6 +57,8 @@ export interface RoomSpot extends Rect {
 export interface OfficePlan {
   rooms: RoomSpot[];
   columns: number;
+  /** The stage is narrow: each room's name list sits on floor in front of its pods. */
+  narrow: boolean;
   width: number;
   depth: number;
 }
@@ -382,6 +384,7 @@ export function planOffice(rooms: RoomModel[], aspect: number): OfficePlan {
 
   return {
     columns,
+    narrow,
     width,
     depth,
     rooms: rooms.flatMap((room) => spots.get(room) ?? []),

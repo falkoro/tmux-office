@@ -49,6 +49,8 @@ export const GLOBAL_SCAN_ACTIVE_MAX_AGE_MS = 600_000; // 10 minutes
 
 /** How often the live Claude session registry re-reads session files under each ~/.claude* config dir. */
 export const CLAUDE_SESSION_POLL_INTERVAL_MS = 2_000;
+/** The per-tick tmux pane listing gives up after this long, before the next tick starts. */
+export const TMUX_LIST_PANES_TIMEOUT_MS = 1_500;
 /** How often an attached terminal re-reads the target window's size. */
 export const TERM_SIZE_POLL_INTERVAL_MS = 2_000;
 /** Cloudflare Access signing keys are cached for this long, then refetched. */

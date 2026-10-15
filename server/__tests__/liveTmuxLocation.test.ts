@@ -20,6 +20,7 @@ import {
   listTmuxPanes,
   listTmuxPanesArgv,
   parseTmuxPaneList,
+  throwawaySessionName,
   type TmuxPaneRecord,
 } from '../src/tmuxTerminal.js';
 
@@ -89,6 +90,27 @@ describe('tmux pane list', () => {
     ]);
     expect(parseTmuxPaneList('%5 bad name @9\n')).toEqual([{ ...movedPane, session: 'bad name' }]);
     expect(parseTmuxPaneList('')).toEqual([]);
+  });
+
+  it('leaves out the throwaway sessions web terminals create', () => {
+    expect(parseTmuxPaneList(`%5 ${throwawaySessionName()} @9\n%5 work-5 @9\n`)).toEqual([
+      movedPane,
+    ]);
+  });
+
+  it('gives up on a hung tmux before the next live-session poll', async () => {
+    const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-tmux-'));
+    fs.writeFileSync(path.join(bin, 'tmux'), '#!/bin/sh\nexec sleep 10\n', { mode: 0o755 });
+    const previous = process.env.PATH;
+    process.env.PATH = `${bin}${path.delimiter}${previous ?? ''}`;
+    try {
+      const started = Date.now();
+      await expect(listTmuxPanes()).resolves.toBeNull();
+      expect(Date.now() - started).toBeLessThan(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    } finally {
+      process.env.PATH = previous;
+      fs.rmSync(bin, { recursive: true, force: true });
+    }
   });
 
   it('asks tmux for every pane on the configured socket', () => {

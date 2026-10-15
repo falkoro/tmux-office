@@ -105,6 +105,20 @@ describe('ClaudeSessionRegistry', () => {
     fs.writeFileSync(path.join(sessions, fileName), JSON.stringify(body));
   }
 
+  it.skipIf(process.getuid?.() === 0)('keeps sessions when the home listing fails once', () => {
+    const root = home();
+    writeSession(root, '.claude', '1.json', { pid: process.pid, sessionId: 'kept', cwd: '/w' });
+    const registry = new ClaudeSessionRegistry({ homeDir: root });
+    registry.refresh();
+    fs.chmodSync(root, 0o300);
+    try {
+      registry.refresh();
+    } finally {
+      fs.chmodSync(root, 0o700);
+    }
+    expect(registry.sessions().map((s) => s.sessionId)).toEqual(['kept']);
+  });
+
   it('keeps live sessions from every config dir and drops dead, bak, and malformed files', () => {
     const root = home();
     writeSession(root, '.claude', '1.json', {
