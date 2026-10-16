@@ -51,6 +51,7 @@ function fakeElement() {
     clientWidth: 800,
     clientHeight: 600,
     append: () => undefined,
+    replaceChildren: () => undefined,
     remove: () => undefined,
     setAttribute: () => undefined,
     addEventListener: (type: string, fn: Handler) => handlers.set(type, fn),
@@ -504,5 +505,38 @@ describe('OfficeScene pointer gestures', () => {
 
     expect(inner.screened(new Vector3(0, 0, -11.9), null)).toBe(false);
     expect(inner.screened(new Vector3(0, 0, -12.5), null)).toBe(true);
+  });
+
+  test('entering walk mode keeps the office plan', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: () => undefined,
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const desk = (agentId: number): DeskModel => ({
+      agentId,
+      name: `a${agentId}`,
+      label: `a${agentId}`,
+      pane: null,
+      status: 'idle',
+      tool: null,
+      contextRatio: 0,
+      helpers: [],
+    });
+    const room = (id: string, agentId: number) => ({
+      id,
+      title: id,
+      pods: [{ id, title: id, pinned: false, hasOverseer: true, desks: [desk(agentId)] }],
+    });
+    const snapshot = { rooms: [room('a', 1), room('b', 2)], selectedId: null };
+    const inner = scene as unknown as { plan: unknown };
+    scene.update(snapshot);
+    const overview = JSON.stringify(inner.plan);
+
+    scene.toggleWalk();
+    scene.update(snapshot);
+
+    expect(JSON.stringify(inner.plan)).toBe(overview);
   });
 });

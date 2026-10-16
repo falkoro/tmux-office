@@ -383,7 +383,8 @@
   max-inline-size: 11em;
 }
 /* Zoomed out past an overview that shows desk labels, the plan holds no floor for the list. */
-.o3d-labels[data-roster-floor='false'][data-density='roster'] .o3d-roster {
+.o3d-labels[data-roster-floor='false'][data-density='roster']
+  .o3d-roster:not([data-background='true']) {
   display: none;
 }
 

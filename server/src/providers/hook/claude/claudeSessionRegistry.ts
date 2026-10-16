@@ -131,6 +131,14 @@ export function procStartTime(stat: string): string | null {
   return stat.slice(end + 2).split(' ')[19] ?? null;
 }
 
+/** Field 4 (ppid) of a `/proc/<pid>/stat` line. */
+export function procParentPid(stat: string): number | null {
+  const end = stat.lastIndexOf(')');
+  if (end < 0) return null;
+  const ppid = Number(stat.slice(end + 2).split(' ')[1]);
+  return Number.isInteger(ppid) ? ppid : null;
+}
+
 /**
  * The pid is alive and, where the session file and /proc can tell, it is the
  * same process in the same pid namespace that wrote the file.

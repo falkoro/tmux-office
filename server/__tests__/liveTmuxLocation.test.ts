@@ -14,25 +14,28 @@ import { resolveLiveTmuxLocations } from '../src/liveTmuxLocation.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
 import {
   ClaudeSessionRegistry,
+  type ProcReader,
   type TmuxLocation,
 } from '../src/providers/hook/claude/claudeSessionRegistry.js';
 import {
   listTmuxPanes,
   listTmuxPanesArgv,
   parseTmuxPaneList,
+  resolvePaneLocation,
   throwawaySessionName,
   type TmuxPaneRecord,
 } from '../src/tmuxTerminal.js';
 
 const execFileAsync = promisify(execFile);
 
-const movedPane: TmuxPaneRecord = { paneId: '%5', session: 'work-5', windowId: '@9' };
+const PID = process.pid;
+const movedPane: TmuxPaneRecord = { paneId: '%5', panePid: PID, session: 'work-5', windowId: '@9' };
 const registryTmux: TmuxLocation = { session: 'work-3', windowId: '@5', paneId: '%5' };
 
 const hasTmux = spawnSync('tmux', ['-V']).status === 0;
 
 describe('resolveLiveTmuxLocations', () => {
-  const sessions = [{ sessionId: 's1', tmux: registryTmux }];
+  const sessions = [{ sessionId: 's1', pid: PID, tmux: registryTmux }];
 
   it('follows a pane that moved to another session', () => {
     const locations = resolveLiveTmuxLocations(sessions, [movedPane]);
@@ -40,21 +43,21 @@ describe('resolveLiveTmuxLocations', () => {
   });
 
   it('keeps the registry session when a grouped session also lists the pane', () => {
-    const view: TmuxPaneRecord = { paneId: '%5', session: 'view', windowId: '@5' };
-    const own: TmuxPaneRecord = { paneId: '%5', session: 'work-3', windowId: '@5' };
+    const view: TmuxPaneRecord = { paneId: '%5', panePid: PID, session: 'view', windowId: '@5' };
+    const own: TmuxPaneRecord = { paneId: '%5', panePid: PID, session: 'work-3', windowId: '@5' };
     expect(resolveLiveTmuxLocations(sessions, [own, view]).get('s1')).toEqual(registryTmux);
     expect(resolveLiveTmuxLocations(sessions, [view, own]).get('s1')).toEqual(registryTmux);
   });
 
   it('takes the first listing when no grouped session is the registry one', () => {
-    const view: TmuxPaneRecord = { paneId: '%5', session: 'view', windowId: '@9' };
+    const view: TmuxPaneRecord = { paneId: '%5', panePid: PID, session: 'view', windowId: '@9' };
     const locations = resolveLiveTmuxLocations(sessions, [movedPane, view]);
     expect(locations.get('s1')).toEqual({ session: 'work-5', windowId: '@9', paneId: '%5' });
   });
 
   it('clears the location when the pane is gone', () => {
     const locations = resolveLiveTmuxLocations(sessions, [
-      { paneId: '%9', session: 'work-5', windowId: '@9' },
+      { paneId: '%9', panePid: PID, session: 'work-5', windowId: '@9' },
     ]);
     expect(locations.get('s1')).toBeNull();
   });
@@ -66,7 +69,13 @@ describe('resolveLiveTmuxLocations', () => {
 
   it('drops a registry location in our own throwaway session when the pane list is unavailable', () => {
     const locations = resolveLiveTmuxLocations(
-      [{ sessionId: 's1', tmux: { ...registryTmux, session: 'pa-web-0123456789abcdef' } }],
+      [
+        {
+          sessionId: 's1',
+          pid: PID,
+          tmux: { ...registryTmux, session: 'pa-web-0123456789abcdef' },
+        },
+      ],
       null,
     );
     expect(locations.get('s1')).toBeNull();
@@ -82,43 +91,77 @@ describe('resolveLiveTmuxLocations', () => {
   });
 
   it('keeps the real session when a web terminal groups onto it', () => {
-    const panes = parseTmuxPaneList('%5 demo @2\n%5 pa-web-0123456789abcdef @2\n');
+    const panes = parseTmuxPaneList(`%5 ${PID} demo @2\n%5 ${PID} pa-web-0123456789abcdef @2\n`);
     const locations = resolveLiveTmuxLocations(
-      [{ sessionId: 's1', tmux: { session: 'demo', windowId: '@2', paneId: '%5' } }],
+      [{ sessionId: 's1', pid: PID, tmux: { session: 'demo', windowId: '@2', paneId: '%5' } }],
       panes,
     );
     expect(locations.get('s1')).toEqual({ session: 'demo', windowId: '@2', paneId: '%5' });
   });
 
   it('keeps a user session whose name only starts like a web terminal', () => {
-    const panes = parseTmuxPaneList('%5 pa-web-dev @2\n');
+    const panes = parseTmuxPaneList(`%5 ${PID} pa-web-dev @2\n`);
     const locations = resolveLiveTmuxLocations(
-      [{ sessionId: 's1', tmux: { session: 'demo', windowId: '@2', paneId: '%5' } }],
+      [{ sessionId: 's1', pid: PID, tmux: { session: 'demo', windowId: '@2', paneId: '%5' } }],
       panes,
     );
     expect(locations.get('s1')).toEqual({ session: 'pa-web-dev', windowId: '@2', paneId: '%5' });
   });
 
+  describe('a pane listed only under another session', () => {
+    const stat = (pid: number, ppid: number) => `${pid} (node) S ${ppid} 1 1 0`;
+    const proc = (parents: Record<number, number>): ProcReader => ({
+      stat: (pid) => (pid in parents ? stat(pid, parents[pid]!) : null),
+      pidNamespace: () => null,
+    });
+    const claude = [{ sessionId: 's1', pid: 300, tmux: registryTmux }];
+    const elsewhere: TmuxPaneRecord = { ...movedPane, panePid: 200 };
+
+    it('follows it when Claude runs in that pane', () => {
+      const locations = resolveLiveTmuxLocations(
+        claude,
+        [elsewhere],
+        proc({ 300: 250, 250: 200, 200: 1 }),
+      );
+      expect(locations.get('s1')).toEqual({ session: 'work-5', windowId: '@9', paneId: '%5' });
+    });
+
+    it('drops the location when it is another tmux server pane with the same id', () => {
+      const locations = resolveLiveTmuxLocations(claude, [elsewhere], proc({ 300: 250, 250: 1 }));
+      expect(locations.get('s1')).toBeNull();
+    });
+
+    it('drops the location when the process tree cannot be read', () => {
+      expect(resolveLiveTmuxLocations(claude, [elsewhere], proc({})).get('s1')).toBeNull();
+    });
+  });
+
   it('leaves a session that has no tmux unset', () => {
-    const locations = resolveLiveTmuxLocations([{ sessionId: 's1', tmux: null }], [movedPane]);
+    const locations = resolveLiveTmuxLocations(
+      [{ sessionId: 's1', pid: PID, tmux: null }],
+      [movedPane],
+    );
     expect(locations.get('s1')).toBeNull();
   });
 });
 
 describe('tmux pane list', () => {
-  it('parses pane id, session name, and window id', () => {
-    expect(parseTmuxPaneList('%5 work-5 @9\n%1 demo @1\n')).toEqual([
+  it('parses pane id, pane pid, session name, and window id', () => {
+    expect(parseTmuxPaneList(`%5 ${PID} work-5 @9\n%1 7 demo @1\n`)).toEqual([
       movedPane,
-      { paneId: '%1', session: 'demo', windowId: '@1' },
+      { paneId: '%1', panePid: 7, session: 'demo', windowId: '@1' },
     ]);
-    expect(parseTmuxPaneList('%5 bad name @9\n')).toEqual([{ ...movedPane, session: 'bad name' }]);
+    expect(parseTmuxPaneList(`%5 ${PID} bad name @9\n`)).toEqual([
+      { ...movedPane, session: 'bad name' },
+    ]);
+    expect(parseTmuxPaneList('%5 work-5 @9\n')).toEqual([]);
     expect(parseTmuxPaneList('')).toEqual([]);
   });
 
   it('leaves out the throwaway sessions web terminals create', () => {
-    expect(parseTmuxPaneList(`%5 ${throwawaySessionName()} @9\n%5 work-5 @9\n`)).toEqual([
-      movedPane,
-    ]);
+    expect(
+      parseTmuxPaneList(`%5 ${PID} ${throwawaySessionName()} @9\n%5 ${PID} work-5 @9\n`),
+    ).toEqual([movedPane]);
   });
 
   it('gives up on a hung tmux before the next live-session poll', async () => {
@@ -146,7 +189,7 @@ describe('tmux pane list', () => {
         'list-panes',
         '-a',
         '-F',
-        '#{pane_id} #{session_name} #{window_id}',
+        '#{pane_id} #{pane_pid} #{session_name} #{window_id}',
       ]);
     } finally {
       if (previous === undefined) delete process.env.PIXEL_AGENTS_TMUX_SOCKET;
@@ -156,7 +199,7 @@ describe('tmux pane list', () => {
       'list-panes',
       '-a',
       '-F',
-      '#{pane_id} #{session_name} #{window_id}',
+      '#{pane_id} #{pane_pid} #{session_name} #{window_id}',
     ]);
   });
 
@@ -241,17 +284,34 @@ describe('tmux pane list', () => {
       const identity = (
         await execFileAsync(
           'tmux',
-          ['-L', socketName, 'display-message', '-p', '-t', 'work-5', '#{pane_id} #{window_id}'],
+          [
+            '-L',
+            socketName,
+            'display-message',
+            '-p',
+            '-t',
+            'work-5',
+            '#{pane_id} #{pane_pid} #{window_id}',
+          ],
           { timeout: 4000 },
         )
       ).stdout
         .trim()
         .split(/\s+/);
       const paneId = identity[0];
-      const windowId = identity[1];
+      const panePid = Number(identity[1]);
+      const windowId = identity[2];
       expect(paneId).toMatch(/^%\d+$/);
       expect(windowId).toMatch(/^@\d+$/);
-      await expect(listTmuxPanes()).resolves.toEqual([{ paneId, session: 'work-5', windowId }]);
+      await expect(listTmuxPanes()).resolves.toEqual([
+        { paneId, panePid, session: 'work-5', windowId },
+      ]);
+      await expect(
+        resolvePaneLocation({ session: 'work-5', windowId: '@0', paneId: paneId! }),
+      ).resolves.toEqual({ session: 'work-5', windowId, paneId });
+      await expect(
+        resolvePaneLocation({ session: 'other-6', windowId, paneId: paneId! }),
+      ).resolves.toBeNull();
     } finally {
       if (previous === undefined) delete process.env.PIXEL_AGENTS_TMUX_SOCKET;
       else process.env.PIXEL_AGENTS_TMUX_SOCKET = previous;

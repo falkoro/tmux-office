@@ -613,7 +613,6 @@ export class AgentRuntime {
     }
     if (this.dismissalTracker.isDismissed(jsonlFile)) return;
     if (this.dismissalTracker.isPermanentlyDismissed(jsonlFile)) return;
-    if (this.dismissalTracker.isClosed(jsonlFile)) return;
 
     this.knownJsonlFiles.add(jsonlFile);
     this.dismissalTracker.clearSeededMtime(jsonlFile);

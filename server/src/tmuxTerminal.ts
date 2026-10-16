@@ -170,13 +170,21 @@ export async function readPaneClientSize(
 /** One pane from `tmux list-panes -a`. Session may still be unsafe. */
 export interface TmuxPaneRecord {
   paneId: string;
+  /** The process tmux started in the pane. */
+  panePid: number;
   session: string;
   windowId: string;
 }
 
 /** Argv for the read-only pane listing. Socket flags match the rest of the server. */
 export function listTmuxPanesArgv(): string[] {
-  return [...tmuxSocketArgs(), 'list-panes', '-a', '-F', '#{pane_id} #{session_name} #{window_id}'];
+  return [
+    ...tmuxSocketArgs(),
+    'list-panes',
+    '-a',
+    '-F',
+    '#{pane_id} #{pane_pid} #{session_name} #{window_id}',
+  ];
 }
 
 /**
@@ -190,16 +198,23 @@ export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
       continue;
     }
     const parts = line.split(' ');
-    if (parts.length < 3) {
+    if (parts.length < 4) {
       continue;
     }
     const paneId = parts[0] ?? '';
+    const panePid = Number(parts[1]);
     const windowId = parts[parts.length - 1] ?? '';
-    const session = parts.slice(1, -1).join(' ');
-    if (!paneId || !session || !windowId || THROWAWAY_SESSION.test(session)) {
+    const session = parts.slice(2, -1).join(' ');
+    if (
+      !paneId ||
+      !Number.isInteger(panePid) ||
+      !session ||
+      !windowId ||
+      THROWAWAY_SESSION.test(session)
+    ) {
       continue;
     }
-    panes.push({ paneId, session, windowId });
+    panes.push({ paneId, panePid, session, windowId });
   }
   return panes;
 }
@@ -218,13 +233,14 @@ export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
 }
 
 /**
- * Where a pane is now. Pane ids are unique per server, but a stored location
- * can predate a window move. Prefers the stored session when it still holds
- * the pane; throwaway sessions are never picked.
+ * Where a pane is now, within its stored session. Pane ids are unique only per
+ * tmux server, so a pane listed under another session may belong to a different
+ * server; the live registry follows confirmed moves. Throwaway sessions are never picked.
  */
 export async function resolvePaneLocation(location: TmuxLocation): Promise<TmuxLocation | null> {
-  const panes = (await listTmuxPanes())?.filter((p) => p.paneId === location.paneId) ?? [];
-  const pane = panes.find((p) => p.session === location.session) ?? panes[0];
+  const pane = (await listTmuxPanes())?.find(
+    (p) => p.paneId === location.paneId && p.session === location.session,
+  );
   return pane ? { session: pane.session, windowId: pane.windowId, paneId: pane.paneId } : null;
 }
 

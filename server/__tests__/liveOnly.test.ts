@@ -275,6 +275,41 @@ describe('live-only', () => {
     expect(tracks(store, jsonl)).toBe(true);
   });
 
+  it('keeps a hook session the user closed closed after claude --resume', () => {
+    const root = tempDir();
+    const jsonl = path.join(root, 'hook-sess.jsonl');
+    fs.writeFileSync(jsonl, '{"type":"user"}\n');
+    const { store, runtime: rt } = startRuntime();
+    rt.watchAllSessions.current = true;
+    const start = (sessionId: string, source: string) => {
+      rt.handleHookEvent('claude', {
+        hook_event_name: 'SessionStart',
+        session_id: sessionId,
+        source,
+        transcript_path: jsonl,
+        cwd: root,
+      });
+      rt.handleHookEvent('claude', { hook_event_name: 'Stop', session_id: sessionId });
+    };
+    start('hook-sess', 'startup');
+    const id = [...store.keys()][0]!;
+    handleClientMessage({ type: 'closeAgent', id }, () => undefined, {
+      store,
+      runtime: rt,
+      cache: null,
+    });
+    expect(tracks(store, jsonl)).toBe(false);
+    rt.handleHookEvent('claude', {
+      hook_event_name: 'SessionEnd',
+      session_id: 'hook-sess',
+      reason: 'prompt_input_exit',
+    });
+
+    start('hook-sess-resumed', 'resume');
+
+    expect(tracks(store, jsonl)).toBe(false);
+  });
+
   it('does not restore a non-live transcript in live-only mode', () => {
     const root = tempDir();
     const jsonl = path.join(root, 'dead.jsonl');

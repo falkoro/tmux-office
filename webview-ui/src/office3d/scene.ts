@@ -1297,8 +1297,8 @@ export class OfficeScene {
   }
 
   /** Screen pixels per metre at the target with the camera `dist` away. */
-  private ppmAt(dist: number): number {
-    return this.height / (2 * dist * Math.tan(MathUtils.degToRad(this.camera.fov / 2)));
+  private ppmAt(dist: number, fov = this.camera.fov): number {
+    return this.height / (2 * dist * Math.tan(MathUtils.degToRad(fov / 2)));
   }
 
   private layout(): void {
@@ -1306,7 +1306,8 @@ export class OfficeScene {
     this.plan = planOffice(this.snapshot.rooms, this.camera.aspect);
     // Reserve floor for the room lists when the overview is far enough out to show them.
     const overview = this.fitView(focusArea(this.plan, null)).orbit.radius;
-    const reserve = this.ppmAt(overview) * OFFICE3D_DESK_PITCH_X < OFFICE3D_COMPACT_LABEL_PX;
+    const reserve =
+      this.ppmAt(overview, OFFICE3D_CAMERA_FOV) * OFFICE3D_DESK_PITCH_X < OFFICE3D_COMPACT_LABEL_PX;
     if (reserve) this.plan = planOffice(this.snapshot.rooms, this.camera.aspect, true);
     this.labels.domElement.dataset.narrow = String(this.plan.narrow);
     this.labels.domElement.dataset.rosterFloor = String(this.plan.narrow || reserve);

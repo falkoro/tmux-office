@@ -20,7 +20,7 @@ export class DismissalTracker {
   /** Files permanently dismissed by /clear reassignment. Never re-adopted in this session. */
   private permanent = new Set<string>();
 
-  /** Live sessions the user closed. Never re-adopted from the live registry in this process. */
+  /** Live sessions the user closed. Never re-adopted in this process, even after a resume. */
   private closed = new Set<string>();
 
   /** Mtime at seeding time (extension startup). If the actual mtime changes later,
@@ -43,10 +43,11 @@ export class DismissalTracker {
     this.dismissed.delete(toPathKey(path));
   }
 
-  /** True if the file is temporarily dismissed AND still within the cooldown window.
-   *  Auto-cleans expired entries (returns false and deletes the stale map entry). */
+  /** True if the user closed the file, or it is temporarily dismissed AND still within
+   *  the cooldown window. Auto-cleans expired entries (deletes the stale map entry). */
   isDismissed(path: string): boolean {
     const key = toPathKey(path);
+    if (this.closed.has(key)) return true;
     const timestamp = this.dismissed.get(key);
     if (timestamp === undefined) return false;
     if (Date.now() - timestamp < DISMISSED_COOLDOWN_MS) return true;
@@ -59,10 +60,6 @@ export class DismissalTracker {
   close(path: string): void {
     this.dismiss(path);
     this.closed.add(toPathKey(path));
-  }
-
-  isClosed(path: string): boolean {
-    return this.closed.has(toPathKey(path));
   }
 
   // ── Permanent dismissals (/clear reassignment) ──────────────────────
