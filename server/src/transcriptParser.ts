@@ -27,12 +27,13 @@ function exemptTools(): ReadonlySet<string> {
   return hookProvider?.permissionExemptTools ?? EMPTY_EXEMPT_TOOLS;
 }
 
-const COMMAND_OUTPUT = /^\s*<(bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>/;
+const COMMAND_OUTPUT =
+  /^\s*(<(bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|\[Request interrupted by user)/;
 const COMMAND_INPUT = /^\s*<bash-input>/;
 
 /**
- * A user record for a command the CLI runs itself, with no model turn: its
- * input (/clear, bash mode) starts no turn, and its output ends one.
+ * A user record the CLI writes with no model turn after it: a command's
+ * input (/clear, bash mode) starts no turn, and its output or an interrupt ends one.
  */
 function localCommandRecord(content: string): 'input' | 'output' | null {
   if (COMMAND_OUTPUT.test(content)) return 'output';
@@ -277,6 +278,25 @@ export function processTranscriptLine(
       processProgressRecord(agentId, record, agents, waitingTimers, permissionTimers);
     } else if (record.type === 'user') {
       const content = record.message?.content ?? record.content;
+      // New user text prompt — new turn starting
+      const userText = (text: string): void => {
+        cancelWaitingTimer(agentId, waitingTimers);
+        clearAgentActivity(agent, agentId, agents, permissionTimers);
+        const local = localCommandRecord(text);
+        if (local === 'output' && !agent.isWaiting) {
+          agent.isWaiting = true;
+          agent.awaitingInput = false;
+          agent.midTurn = false;
+          agents.broadcast({
+            type: 'agentStatus',
+            id: agentId,
+            status: 'waiting',
+            awaitingInput: false,
+          });
+        } else if (local) agent.midTurn = false;
+        else startTurn(agent, agentId, agents);
+        agent.hadToolsInTurn = false;
+      };
       if (Array.isArray(content)) {
         const blocks = content as Array<{ type: string; tool_use_id?: string; content?: unknown }>;
         const hasToolResult = blocks.some((b) => b.type === 'tool_result');
@@ -412,30 +432,11 @@ export function processTranscriptLine(
             agent.hadToolsInTurn = false;
           }
         } else {
-          // New user text prompt — new turn starting
-          cancelWaitingTimer(agentId, waitingTimers);
-          clearAgentActivity(agent, agentId, agents, permissionTimers);
-          startTurn(agent, agentId, agents);
-          agent.hadToolsInTurn = false;
+          const first = blocks.find((b) => b.type === 'text') as { text?: unknown } | undefined;
+          userText(typeof first?.text === 'string' ? first.text : '');
         }
       } else if (typeof content === 'string' && content.trim() && !record.isMeta) {
-        // New user text prompt — new turn starting
-        cancelWaitingTimer(agentId, waitingTimers);
-        clearAgentActivity(agent, agentId, agents, permissionTimers);
-        const local = localCommandRecord(content);
-        if (local === 'output' && !agent.isWaiting) {
-          agent.isWaiting = true;
-          agent.awaitingInput = false;
-          agent.midTurn = false;
-          agents.broadcast({
-            type: 'agentStatus',
-            id: agentId,
-            status: 'waiting',
-            awaitingInput: false,
-          });
-        } else if (local) agent.midTurn = false;
-        else startTurn(agent, agentId, agents);
-        agent.hadToolsInTurn = false;
+        userText(content);
       }
     } else if (record.type === 'queue-operation' && record.operation === 'enqueue') {
       // Background agent completed — parse tool-use-id from XML content

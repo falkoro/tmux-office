@@ -68,4 +68,17 @@ describe('/ws/term input during attach', () => {
     await vi.waitFor(() => expect(written.join('')).toBe('echo hi\rls\ry'));
     socket.close();
   });
+
+  it('closes as too big when more than 64 KiB is typed before tmux draws', async () => {
+    const { port } = await ready;
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/term?agentId=1&token=test-token`);
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+    const closed = new Promise<number>((resolve) => socket.once('close', resolve));
+    socket.send(Buffer.alloc(64 * 1024, 'a'));
+    socket.send(Buffer.from('b'));
+    expect(await closed).toBe(1009);
+  });
 });

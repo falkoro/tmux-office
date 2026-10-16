@@ -181,6 +181,8 @@ export function useExtensionMessages(
   // than dropping it — the server sends one request per provider on the same handshake.
   const [consentQueue, setConsentQueue] = useState<HooksConsentRequest[]>([]);
   const consentRequest = consentQueue[0] ?? null;
+  // Providers whose tour ended on this page. A reconnect re-runs the handshake; it must not reopen the Intro.
+  const consentDismissedRef = useRef(new Set<string>());
   const [areaMappings, setAreaMappings] = useState<Record<string, string[]>>({});
   const [showAreas, setShowAreas] = useState(false);
   const [agentTerminals, setAgentTerminals] = useState<Record<number, AgentTerminalMeta>>({});
@@ -792,7 +794,8 @@ export function useExtensionMessages(
         if (
           typeof msg.providerId === 'string' &&
           typeof msg.headline === 'string' &&
-          typeof msg.disclosure === 'string'
+          typeof msg.disclosure === 'string' &&
+          !consentDismissedRef.current.has(msg.providerId)
         ) {
           const request: HooksConsentRequest = {
             type: 'hooksConsentRequest',
@@ -891,12 +894,14 @@ export function useExtensionMessages(
     // Called when a tour ends (answer + Let's Go, the X, Escape) with the providerId that tour was ABOUT, removing
     // that entry so the next provider's ask becomes the head. Keyed by id, not a blind shift: an answered ask's own
     // installed:true moot may already have removed the head, and a shift would then drop the NEXT provider's ask
-    // unanswered. An aborted ask returns on the next connect; the queue never re-adds it here.
+    // unanswered. An aborted ask returns on the next page load; the queue never re-adds it here.
     dismissConsentRequest: useCallback(
       (providerId: string | null) =>
-        setConsentQueue((q) =>
-          providerId === null ? q.slice(1) : q.filter((r) => r.providerId !== providerId),
-        ),
+        setConsentQueue((q) => {
+          const id = providerId ?? q[0]?.providerId;
+          if (id !== undefined) consentDismissedRef.current.add(id);
+          return providerId === null ? q.slice(1) : q.filter((r) => r.providerId !== providerId);
+        }),
       [],
     ),
     areaMappings,

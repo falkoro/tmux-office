@@ -17,7 +17,10 @@ import { handleClientMessage } from './clientMessageHandler.js';
 import {
   HOOK_API_PREFIX,
   MAX_HOOK_BODY_SIZE,
+  TERMINAL_OUTPUT_BUFFER_MAX_BYTES,
+  TERMINAL_PENDING_INPUT_MAX_BYTES,
   WS_CLOSE_FORBIDDEN_ORIGIN,
+  WS_CLOSE_MESSAGE_TOO_BIG,
   WS_CLOSE_UNAUTHORIZED,
 } from './constants.js';
 import { agentCreatedTerminalFields } from './liveSessionSync.js';
@@ -453,23 +456,32 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
     socket.on('close', detach);
     socket.on('error', detach);
     const pending: Buffer[] = [];
+    let pendingBytes = 0;
     let drawing = false;
     const flush = (): void => {
       if (!attached || !drawing || stopped) return;
       for (const bytes of pending.splice(0)) attached.pty.write(bytes);
+      pendingBytes = 0;
     };
     socket.on('message', (data: unknown, isBinary: boolean) => {
       if (!isBinary || stopped) return;
       const bytes = toBuffer(data);
       if (bytes.length === 0) return;
       pending.push(bytes);
+      pendingBytes += bytes.length;
+      if (pendingBytes > TERMINAL_PENDING_INPUT_MAX_BYTES) {
+        socket.close(WS_CLOSE_MESSAGE_TOO_BIG);
+        return;
+      }
       flush();
     });
 
     void attachTmuxPane(
       location,
       (data) => {
-        if (socket.readyState === 1) socket.send(Buffer.from(data, 'utf8'));
+        if (socket.bufferedAmount > TERMINAL_OUTPUT_BUFFER_MAX_BYTES)
+          socket.close(WS_CLOSE_MESSAGE_TOO_BIG);
+        else if (socket.readyState === 1) socket.send(Buffer.from(data, 'utf8'));
         if (!drawing) {
           drawing = true;
           flush();

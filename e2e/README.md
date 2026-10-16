@@ -1,6 +1,6 @@
 # Pixel Agents e2e tests
 
-Playwright end-to-end tests for the VS Code extension and the standalone `npx pixel-agents` server. This README is the single source of truth for what's e2e-tested, what's not, and how to run the suite.
+Playwright end-to-end tests for the VS Code extension and the standalone `node dist/cli.js` server. This README is the single source of truth for what's e2e-tested, what's not, and how to run the suite.
 
 ## What this suite covers
 
@@ -28,7 +28,7 @@ Every spawn permutation (internal vs external origin × basic vs inline-teammate
 
 ### Standalone server (`@area:standalone`)
 
-The `npx pixel-agents` CLI path: hook-driven lifecycle propagates from the local server into the browser SPA via the single `/ws` WebSocket endpoint.
+The `node dist/cli.js` CLI path: hook-driven lifecycle propagates from the local server into the browser SPA via the single `/ws` WebSocket endpoint.
 
 ### Pet system (`@area:pets`)
 
@@ -64,9 +64,9 @@ CI green on this suite is the safety net for behavioral regressions. The checks 
 - Use a session with a large pasted image (multi-MB base64 user message) — confirm the "Possible format issue" warning doesn't false-fire and tool tracking still works.
 - Test with one MCP server installed — confirm `mcp_progress` records don't break tool status.
 
-**`npx pixel-agents` standalone** (e2e covers Chrome via Playwright; verify other browsers + real workflow):
+**`node dist/cli.js` standalone** (e2e covers Chrome via Playwright; verify other browsers + real workflow):
 
-- `node dist/cli.js` (or `npx pixel-agents` after publish), open `http://localhost:3100` in Firefox AND Safari, run a real Claude session in a terminal — confirm characters appear and animate via WebSocket.
+- `node dist/cli.js`, open `http://localhost:3100` in Firefox AND Safari, run a real Claude session in a terminal — confirm characters appear and animate via WebSocket.
 - Refresh the browser mid-session — WebSocketTransport reconnects, agents reappear from server state.
 
 **Cross-window sync** (rarely covered by CI, easy to break):

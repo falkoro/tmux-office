@@ -696,7 +696,11 @@ function desk(d: Decor, spot: DeskSpot, name: string): void {
     [0.5, DZ + 0.12],
     [0.15, DZ + 0.16],
   ];
-  const kinds = [0, 1, 2, 3, 4].sort(() => r() - 0.5);
+  const kinds = [0, 1, 2, 3, 4];
+  for (let i = kinds.length - 1; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1));
+    [kinds[i], kinds[j]] = [kinds[j], kinds[i]];
+  }
   const things = r() < 0.5 ? 1 : 2;
   for (let i = 0; i < things; i++) {
     const [x, z] = places[i];

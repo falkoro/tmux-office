@@ -545,6 +545,38 @@ describe('live-only', () => {
     expect(planted.store.get(agent.id)).toBeUndefined();
   });
 
+  it('leaves the /clear successor to the hook when the registry shows it first', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    const agent = [...planted.store.values()][0]!;
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS - 100);
+    planted.runtime.handleHookEvent('claude', {
+      hook_event_name: 'SessionEnd',
+      session_id: planted.sessionId,
+      reason: 'clear',
+    });
+    const nextSession = '55555555-5555-5555-5555-555555555555';
+    const nextJsonl = path.join(planted.projectDir, `${nextSession}.jsonl`);
+    fs.writeFileSync(nextJsonl, '{"type":"user"}\n');
+    fs.writeFileSync(
+      planted.sessionFile,
+      JSON.stringify({ pid: process.pid, sessionId: nextSession, cwd: planted.cwd }),
+    );
+    await vi.advanceTimersByTimeAsync(100);
+    expect([...planted.store.keys()]).toEqual([agent.id]);
+
+    planted.runtime.handleHookEvent('claude', {
+      hook_event_name: 'SessionStart',
+      session_id: nextSession,
+      source: 'clear',
+      transcript_path: nextJsonl,
+      cwd: planted.cwd,
+    });
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect([...planted.store.keys()]).toEqual([agent.id]);
+    expect(planted.store.get(agent.id)?.jsonlFile).toBe(nextJsonl);
+  });
+
   it('keeps a sub-agent and an inline teammate of a live lead', async () => {
     vi.useFakeTimers();
     const planted = plant(true);

@@ -98,6 +98,10 @@ export const WS_CLOSE_UNAUTHORIZED = 4001;
  *  WebSocket connects bypass CORS, so this is the only thing standing between
  *  a drive-by web page and the privileged client-message channel. */
 export const WS_CLOSE_FORBIDDEN_ORIGIN = 4003;
+/** /ws/term: input queued before tmux draws, or output the client is not reading, passed its cap. */
+export const WS_CLOSE_MESSAGE_TOO_BIG = 1009;
+export const TERMINAL_PENDING_INPUT_MAX_BYTES = 64 * 1024;
+export const TERMINAL_OUTPUT_BUFFER_MAX_BYTES = 8 * 1024 * 1024;
 
 export const HOOK_EVENT_BUFFER_MS = 5_000;
 /** Grace period after SessionEnd(reason=clear/resume) before triggering onSessionEnd.

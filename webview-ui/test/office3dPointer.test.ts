@@ -486,4 +486,23 @@ describe('OfficeScene pointer gestures', () => {
     expect(inner.screened(new Vector3(0, 1.3, -7), null)).toBe(false);
     expect(inner.screened(new Vector3(0, 0.5, -3), null)).toBe(true);
   });
+
+  test('at eye level a label shows within 12 m and hides past it', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: () => undefined,
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const inner = scene as unknown as {
+      camera: { position: Vector3 };
+      deskList: unknown[];
+      screened: (at: Vector3, own: Box3 | null) => boolean;
+    };
+    inner.deskList = [];
+    inner.camera.position.set(0, 0, 0);
+
+    expect(inner.screened(new Vector3(0, 0, -11.9), null)).toBe(false);
+    expect(inner.screened(new Vector3(0, 0, -12.5), null)).toBe(true);
+  });
 });

@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { AccessVerifier } from '../src/accessJwt.js';
 import type { OfficeFeedState } from '../src/officeFeed.js';
 
 // Use isolated temp HOME to avoid touching real ~/.pixel-agents/
@@ -199,6 +200,9 @@ describe('PixelAgentsServer', () => {
     const config1 = await server.start({ embedded: false });
     const server2 = new PixelAgentsServer();
     await expect(server2.start({ embedded: false, insecureLocalTerminal: true })).rejects.toThrow(
+      `port ${config1.port} (PID ${config1.pid})`,
+    );
+    await expect(server2.start({ embedded: false, access: {} as AccessVerifier })).rejects.toThrow(
       `port ${config1.port} (PID ${config1.pid})`,
     );
     expect(registryFiles()).toHaveLength(1);

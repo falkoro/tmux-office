@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Standalone CLI entry point: `npx pixel-agents`
+ * Standalone CLI entry point: `node dist/cli.js`
  *
  * Starts the Fastify server in standalone mode with SPA serving and WebSocket.
  * Loads all assets (PNGs -> SpriteData) on startup and caches in memory.
@@ -93,7 +93,7 @@ export function parseArgs(argv: string[]): CliArgs {
     } else if (argv[i] === '--insecure-local-terminal') {
       args.insecureLocalTerminal = true;
     } else if (argv[i] === '--help') {
-      console.log(`Usage: pixel-agents [options]
+      console.log(`Usage: node dist/cli.js [options]
 
 Options:
   --port, -p <number>       Port to listen on (default: OS-assigned ephemeral port)

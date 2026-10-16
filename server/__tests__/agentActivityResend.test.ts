@@ -152,6 +152,24 @@ describe('resendAgentActivity', () => {
     expect(replayed).toEqual(live);
   });
 
+  it('ends the turn when the user interrupts a response', () => {
+    for (const content of [
+      [{ type: 'text', text: '[Request interrupted by user]' }],
+      '[Request interrupted by user for tool use]',
+    ]) {
+      const { live, replayed } = liveAndReplayedStatus((store) => {
+        for (const record of [
+          { type: 'user', message: { content: 'task' } },
+          { type: 'user', message: { content } },
+        ]) {
+          processTranscriptLine(1, JSON.stringify(record), store, new Map(), new Map());
+        }
+      });
+      expect(live).toMatchObject({ status: 'waiting' });
+      expect(replayed).toEqual(live);
+    }
+  });
+
   it('sends no new status when an idle agent runs a bash-mode command', () => {
     const store = new AgentStateStore();
     store.set(1, createTestAgent({ id: 1, isWaiting: true }));

@@ -75,6 +75,21 @@ describe('verifyAccessJwt', () => {
     expect(result).toEqual({ ok: false, reason: 'aud' });
   });
 
+  it('rejects a token issued by another team domain', () => {
+    const token = sign(privateKey, payload({ iss: 'https://other.cloudflareaccess.com' }));
+    expect(verifyAccessJwt(token, { issuer: ISSUER, aud: AUD }, keys).ok).toBe(false);
+  });
+
+  it('rejects a token without an expiry', () => {
+    const token = sign(privateKey, payload({ exp: undefined }));
+    expect(verifyAccessJwt(token, { issuer: ISSUER, aud: AUD }, keys).ok).toBe(false);
+  });
+
+  it('rejects a token that is not valid for another hour', () => {
+    const token = sign(privateKey, payload({ nbf: Math.floor(Date.now() / 1000) + 3600 }));
+    expect(verifyAccessJwt(token, { issuer: ISSUER, aud: AUD }, keys).ok).toBe(false);
+  });
+
   it('rejects an expired token outside the skew', () => {
     const now = Math.floor(Date.now() / 1000);
     const token = sign(privateKey, payload({ exp: now - 120 }));

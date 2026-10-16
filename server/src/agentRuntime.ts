@@ -573,7 +573,7 @@ export class AgentRuntime {
    * Children stay while their lead stays, and leave with the lead. A child
    * whose lead is gone is judged by its own session. An agent moved by /clear
    * stays while the registry still shows the session it was moved from, until
-   * the registry has shown its new one.
+   * the registry has shown its new one, and stays while /clear moves it.
    * The transcript is not dismissed: a new pid with the same session id
    * must be adopted on a later tick.
    */
@@ -583,7 +583,7 @@ export class AgentRuntime {
     const departing: number[] = [];
     for (const [id, agent] of this.store) {
       if (agent.leadAgentId !== undefined && this.store.has(agent.leadAgentId)) continue;
-      if (live.has(agent.sessionId)) continue;
+      if (live.has(agent.sessionId) || agent.pendingClear) continue;
       if (agent.clearedFromSessionId && live.has(agent.clearedFromSessionId)) continue;
       departing.push(id);
     }
@@ -609,6 +609,7 @@ export class AgentRuntime {
     if (!watching) return;
     for (const agent of this.store.values()) {
       if (agent.sessionId === session.sessionId || pathsMatch(agent.jsonlFile, jsonlFile)) return;
+      if (agent.pendingClear && pathsMatch(agent.projectDir, projectDir)) return;
     }
     if (this.dismissalTracker.isDismissed(jsonlFile)) return;
     if (this.dismissalTracker.isPermanentlyDismissed(jsonlFile)) return;

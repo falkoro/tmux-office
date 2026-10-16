@@ -9,12 +9,14 @@ import {
   OFFICE3D_ROSTER_LINE_DEPTH,
 } from '../src/constants.js';
 import type { OfficePlan, RoomSpot } from '../src/office3d/layout.js';
-import { fitKey, planOffice, porchRosterColumns } from '../src/office3d/layout.js';
+import { fitKey, planOffice } from '../src/office3d/layout.js';
 import type { DeskModel, PodModel, RoomModel } from '../src/office3d/model.js';
 import { BACKGROUND_ROOM_ID, NO_PANE_POD_ID } from '../src/office3d/model.js';
 
 const DESKTOP = 1600 / 900;
 const PHONE = 390 / 844;
+/** docs/office3d.md: a wide stage's name list has one column per 5 m of room width. */
+const wideColumns = (width: number) => Math.max(1, Math.floor(width / 5));
 
 let nextId = 1;
 function pod(id: string, desks: number, pinned = false): PodModel {
@@ -221,12 +223,12 @@ describe('planOffice', () => {
     r.z + r.depth / 2 - Math.max(...r.pods.map((p) => p.z + p.depth / 2));
 
   test('a room shown as a name list reserves floor in front of its pods for its lines', () => {
-    // office3d.css lays the list out two names per line on a phone, porchRosterColumns on a
+    // office3d.css lays the list out two names per line on a phone, one per 5 m on a
     // wide stage, where the plaques hanging from the pods take one more line of that floor.
     for (const [aspect, perLine, plaques] of [
       [PHONE, () => 2, 0],
-      [DESKTOP, porchRosterColumns, 1],
-      [1366 / 768, porchRosterColumns, 1],
+      [DESKTOP, wideColumns, 1],
+      [1366 / 768, wideColumns, 1],
     ] as const) {
       for (const r of planOffice(demo(), aspect, true).rooms) {
         const lines = Math.ceil(r.desks.length / perLine(r.width)) + plaques;
@@ -262,6 +264,19 @@ describe('planOffice', () => {
       assert.deepEqual(
         crew.map((d) => d.z),
         [crew[0].z, crew[0].z, crew[0].z],
+      );
+    }
+  });
+
+  test('five crew sit in a row of four with the fifth in a second row further front', () => {
+    for (const aspect of [DESKTOP, PHONE]) {
+      const [lead, ...crew] = planOffice([room('a', pod('a', 6))], aspect).rooms[0].pods[0].desks;
+      const rows = [...new Set(crew.map((d) => d.z))].sort((a, b) => a - b);
+      assert.equal(rows.length, 2);
+      assert.ok(rows[0] > lead.z);
+      assert.deepEqual(
+        rows.map((z) => crew.filter((d) => d.z === z).length),
+        [4, 1],
       );
     }
   });
@@ -327,7 +342,7 @@ describe('planOffice', () => {
       DESKTOP,
     );
     const porch = plan.rooms[1];
-    const lines = Math.ceil(porch.desks.length / porchRosterColumns(porch.width));
+    const lines = Math.ceil(porch.desks.length / wideColumns(porch.width));
     const floor = porch.z + porch.depth / 2 - Math.max(...porch.desks.map((d) => d.z));
     assert.ok(floor >= lines * OFFICE3D_ROSTER_LINE_DEPTH);
   });

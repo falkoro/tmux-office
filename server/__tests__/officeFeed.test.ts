@@ -184,6 +184,7 @@ describe('GET /api/office', () => {
       const res = await app.inject({ method: 'GET', url: '/api/office', headers });
       expect(res.statusCode).toBe(200);
       expect(res.json().desks[0]).toMatchObject({ session: 'work-8', status: 'working' });
+      expect(res.headers['access-control-allow-credentials']).toBeUndefined();
     }
   });
 

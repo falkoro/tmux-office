@@ -43,7 +43,7 @@ type HookEventCallback = (providerId: string, event: Record<string, unknown>) =>
  * Multi-window / multi-surface: a second instance detects running servers via
  * the registry and reuses one only when it offers the same capability
  * (embedded reuses embedded, standalone reuses standalone) -- an embedded
- * VS Code server and a standalone `npx pixel-agents` server can run at once,
+ * VS Code server and a standalone `node dist/cli.js` server can run at once,
  * each owning its own registry entry, both reachable by hook fan-out.
  */
 export class PixelAgentsServer {
