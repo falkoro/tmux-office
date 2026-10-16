@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 
 import type { ChoiceStore } from '../src/office3d/characterChoice.js';
-import { loadCharacter, saveCharacter } from '../src/office3d/characterChoice.js';
+import {
+  aliasKey,
+  applyAliases,
+  loadCharacter,
+  saveAlias,
+  saveCharacter,
+} from '../src/office3d/characterChoice.js';
 import type { ActorKind, CharacterKind, CharacterMood } from '../src/office3d/characters.js';
 import {
   CHARACTER_KINDS,
@@ -14,6 +20,7 @@ import {
   nextIdleIn,
   POSE_SIZE,
 } from '../src/office3d/characters.js';
+import type { RoomModel } from '../src/office3d/model.js';
 
 const MOODS: CharacterMood[] = ['work', 'alert', 'ask', 'cheer', 'rest', 'doze'];
 
@@ -99,6 +106,58 @@ describe('character choice', () => {
     const store = memoryStore();
     store.setItem('pixel-agents.office3d.character:ops', 'goblin');
     assert.equal(loadCharacter('ops', store), defaultCharacterKind('ops'));
+  });
+});
+
+describe('renaming', () => {
+  const office = (): RoomModel[] => [
+    {
+      id: 'work',
+      title: 'work',
+      pods: [
+        {
+          id: 'work-4',
+          title: 'work-4',
+          pinned: false,
+          hasOverseer: true,
+          desks: [
+            {
+              agentId: 1,
+              name: 'fm-oss-nm-update-unit-refresh',
+              label: 'fm oss nm update unit refresh',
+              pane: null,
+              status: 'idle',
+              tool: null,
+              contextRatio: 0,
+              helpers: [],
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  test('names a viewer picks replace the labels until cleared', () => {
+    const store = memoryStore();
+    saveAlias(aliasKey('pod', 'work-4'), 'oss crew', store);
+    saveAlias(aliasKey('desk', 'fm-oss-nm-update-unit-refresh'), 'unit refresh', store);
+    const named = office();
+    applyAliases(named, store);
+    assert.equal(named[0].pods[0].title, 'oss crew');
+    assert.equal(named[0].pods[0].desks[0].label, 'unit refresh');
+    assert.equal(named[0].pods[0].desks[0].name, 'fm-oss-nm-update-unit-refresh');
+
+    saveAlias(aliasKey('pod', 'work-4'), '', store);
+    const cleared = office();
+    applyAliases(cleared, store);
+    assert.equal(cleared[0].pods[0].title, 'work-4');
+  });
+
+  test('blocked storage keeps the tmux names', () => {
+    const rooms = office();
+    saveAlias(aliasKey('pod', 'work-4'), 'oss crew', blocked);
+    applyAliases(rooms, blocked);
+    assert.equal(rooms[0].pods[0].title, 'work-4');
   });
 });
 

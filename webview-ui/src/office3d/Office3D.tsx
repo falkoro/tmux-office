@@ -9,6 +9,7 @@ import type { AgentTerminalMeta } from '../hooks/useExtensionMessages.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import type { ToolActivity } from '../office/types.js';
 import { isBrowserRuntime } from '../runtime.js';
+import { aliasKey, applyAliases, saveAlias } from './characterChoice.js';
 import type { Focus, RoomModel } from './model.js';
 import { BACKGROUND_ROOM_ID, deriveOffice, roomHeat } from './model.js';
 import { OfficeScene } from './scene.js';
@@ -91,6 +92,7 @@ export default function Office3D(props: Office3DProps) {
       const { officeState: os, agentTerminals, agentTools, officeRooms } = latest.current;
       os.finishDespawns();
       const next = deriveOffice(os.characters.values(), agentTerminals, agentTools, officeRooms);
+      applyAliases(next);
       const signature = JSON.stringify([next, os.selectedAgentId]);
       if (signature === last) return;
       last = signature;
@@ -108,6 +110,19 @@ export default function Office3D(props: Office3DProps) {
 
   const room = barRoom(rooms, focused);
   const pods = room && room.pods.length > 1 ? room.pods : [];
+  const allPods = rooms.flatMap((r) => r.pods);
+  const selectedDesk = allPods
+    .flatMap((p) => p.desks)
+    .find((d) => d.agentId === props.officeState.selectedAgentId);
+  const focusedPod = focused?.kind === 'pod' ? allPods.find((p) => p.id === focused.id) : undefined;
+  // VS Code webviews block window.prompt.
+  const renaming = !isBrowserRuntime
+    ? null
+    : selectedDesk
+      ? { key: aliasKey('desk', selectedDesk.name), name: selectedDesk.label }
+      : focusedPod
+        ? { key: aliasKey('pod', focusedPod.id), name: focusedPod.title }
+        : null;
   return (
     <div className="o3d-root" style={STATUS_VARS}>
       <div ref={hostRef} className="o3d-host" />
@@ -147,15 +162,33 @@ export default function Office3D(props: Office3DProps) {
             {pod.title}
           </button>
         ))}
-        <button
-          type="button"
-          className="o3d-bar-btn o3d-bar-walk"
-          aria-pressed={walking}
-          title="Walk through the office. Drag to look, WASD or arrows to move, Shift runs, Esc leaves."
-          onClick={() => sceneRef.current?.toggleWalk()}
-        >
-          Walk
-        </button>
+        <span className="o3d-bar-end">
+          {renaming && (
+            <button
+              type="button"
+              className="o3d-bar-btn"
+              title={`Rename ${renaming.name} in this browser`}
+              onClick={() => {
+                const name = window.prompt(
+                  `Rename ${renaming.name}. Leave it empty to restore the tmux name.`,
+                  renaming.name,
+                );
+                if (name !== null) saveAlias(renaming.key, name.trim());
+              }}
+            >
+              Rename
+            </button>
+          )}
+          <button
+            type="button"
+            className="o3d-bar-btn"
+            aria-pressed={walking}
+            title="Walk through the office. Drag to look, WASD or arrows to move, Shift runs, Esc leaves."
+            onClick={() => sceneRef.current?.toggleWalk()}
+          >
+            Walk
+          </button>
+        </span>
       </nav>
     </div>
   );

@@ -400,6 +400,7 @@ export const OFFICE3D_INSET_BOTTOM_PX = 72;
 export const OFFICE3D_INSET_SIDE_PX = 14;
 /** localStorage key prefix for a viewer's character choice, per desk name. */
 export const OFFICE3D_CHARACTER_KEY = 'pixel-agents.office3d.character:';
+export const OFFICE3D_ALIAS_KEY = 'pixel-agents.office3d.alias:';
 /**
  * Eye height while walking, in metres: a little (0.15) above a seated overseer's crown.
  * Crown = floor + seat + (head centre - hip) + helmet half-height.

@@ -551,9 +551,13 @@
   font-weight: 500;
 }
 
-.o3d-bar-walk {
+/* Rename and Walk stay in view while the session buttons scroll under them. */
+.o3d-bar-end {
   position: sticky;
   inset-inline-end: 0;
+  display: flex;
+  flex: none;
+  gap: 6px;
   margin-inline-start: auto;
 }
 
