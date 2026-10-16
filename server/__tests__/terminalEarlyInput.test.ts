@@ -82,6 +82,39 @@ describe('/ws/term input during attach', () => {
     expect(await closed).toBe(1009);
   });
 
+  it('never types the rejected input when tmux draws before the close completes', async () => {
+    const { port } = await ready;
+    finishAttach = null;
+    written.length = 0;
+    let stops = 0;
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/term?agentId=1&token=test-token`);
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+    await vi.waitFor(() => expect(finishAttach).not.toBeNull());
+    socket.send(Buffer.alloc(64 * 1024, 'a'));
+    socket.send(Buffer.from('b'));
+    socket.pause();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+
+    finishAttach!({
+      pty: {
+        write: (data: Buffer | string) => written.push(data.toString()),
+        onExit: () => undefined,
+      },
+      sessionName: 'pa-web-test',
+      stop: () => stops++,
+    } as unknown as AttachedTerminal);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    paneOutput!('$ ');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(written).toEqual([]);
+    expect(stops).toBe(1);
+    socket.terminate();
+  });
+
   it('types a paste over 64 KiB into a terminal tmux already draws', async () => {
     const { port } = await ready;
     finishAttach = null;

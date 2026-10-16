@@ -470,7 +470,12 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
       pending.push(bytes);
       pendingBytes += bytes.length;
       flush();
-      if (pendingBytes > TERMINAL_PENDING_INPUT_MAX_BYTES) socket.close(WS_CLOSE_MESSAGE_TOO_BIG);
+      if (pendingBytes > TERMINAL_PENDING_INPUT_MAX_BYTES) {
+        detach();
+        pending.length = 0;
+        pendingBytes = 0;
+        socket.close(WS_CLOSE_MESSAGE_TOO_BIG);
+      }
     });
 
     void attachTmuxPane(

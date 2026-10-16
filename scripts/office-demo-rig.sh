@@ -114,7 +114,6 @@ start_rig() {
     fi
     i=$((i + 1))
   done
-  trap - ERR
 
   (HOME="$dir/home" PIXEL_AGENTS_TMUX_SOCKET="$sock" \
     PIXEL_AGENTS_OFFICE_ROOMS="${PIXEL_AGENTS_OFFICE_ROOMS-work=work-*}" \
@@ -136,6 +135,7 @@ start_rig() {
   fi
   sleep 6
   seed_states
+  trap - ERR
   animate > /dev/null 2>&1 &
   echo $! > "$dir/animate.pid"
   printf '%s\n' "$url"

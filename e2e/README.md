@@ -47,9 +47,9 @@ Scenarios that exist as product behavior but are not in the automated suite. PRs
 | Heuristic-timer cancellation after **internal-terminal** agent close                     | VS Code terminal panel collapse races the canvas click on the X overlay; covered via the external-agent variant which dodges the layout race | external variant in suite    |
 | Producer/viewer relay scenarios (multi-viewer replay, producer reconnect reconciliation) | Producer endpoint not yet built                                                                                                              | `feat/producer-viewer-split` |
 
-## Pre-release manual smoke (~30 min)
+## Manual smoke (~30 min)
 
-CI green on this suite is the safety net for behavioral regressions. The checks below are what e2e can't meaningfully assert on (visual polish, real-Claude integration, cross-process behaviors). Run them before tagging a Marketplace release — not on every PR.
+CI green on this suite is the safety net for behavioral regressions. The checks below are what e2e can't meaningfully assert on (visual polish, real-Claude integration, cross-process behaviors). Run them after a change to the areas named below, or after a Claude Code upgrade — not on every PR.
 
 **Visual + interactive polish** (after any change touching `renderer.ts`, `spriteCache.ts`, `colorize.ts`, `*.tsx`, CSS, or `editorActions.ts`):
 
@@ -73,7 +73,7 @@ CI green on this suite is the safety net for behavioral regressions. The checks 
 
 - Open two VS Code windows. Edit the layout in one (paint a tile, save). Within ~2 s the other window picks it up.
 
-**First-run experience** (before publishing):
+**First-run experience** (after any change to the Intro or the hook installer):
 
 - Delete `~/.pixel-agents/` entirely. Launch the extension fresh — default layout loads, first-run tooltip appears, no console errors, hooks auto-install on first agent spawn.
 
