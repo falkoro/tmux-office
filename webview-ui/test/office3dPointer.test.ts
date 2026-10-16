@@ -1,6 +1,5 @@
-import type { Box3 } from 'three';
-import { Group, Vector3 } from 'three';
-import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
+import { Box3, Group, Vector3 } from 'three';
+import { afterAll, afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 
 import { OFFICE3D_WALK_EYE_Y, OFFICE3D_WALK_PORCH } from '../src/constants.js';
 import type { DeskModel } from '../src/office3d/model.js';
@@ -92,6 +91,9 @@ describe('OfficeScene pointer gestures', () => {
         disconnect(): void {}
       },
     );
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
   afterAll(() => {
     vi.unstubAllGlobals();
@@ -538,5 +540,62 @@ describe('OfficeScene pointer gestures', () => {
     scene.update(snapshot);
 
     expect(JSON.stringify(inner.plan)).toBe(overview);
+  });
+
+  test('a click from inside a desk the walker passes through picks the desk in front', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: () => undefined,
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const inner = scene as unknown as {
+      camera: {
+        position: Vector3;
+        rotation: { set: (x: number, y: number, z: number) => void };
+        updateMatrixWorld: () => void;
+      };
+      deskList: unknown[];
+      pick: (e: { clientX: number; clientY: number }) => number | null;
+    };
+    inner.camera.position.set(0, OFFICE3D_WALK_EYE_Y, 0);
+    inner.camera.rotation.set(0, 0, 0);
+    inner.camera.updateMatrixWorld();
+    const box = (z: number) =>
+      new Box3(new Vector3(-0.5, 0, z - 0.5), new Vector3(0.5, OFFICE3D_WALK_EYE_Y + 0.5, z + 0.5));
+    inner.deskList = [
+      { agentId: 5, hit: box(0), helperList: [{ agentId: 6, hit: box(0) }] },
+      { agentId: 9, hit: box(-4), helperList: [] },
+    ];
+
+    expect(inner.pick({ clientX: 400, clientY: 300 })).toBe(9);
+  });
+
+  test('Esc typed into a text field stays in walk mode', async () => {
+    class FakeHTMLElement {
+      isContentEditable = false;
+      tagName = 'TEXTAREA';
+    }
+    vi.stubGlobal('HTMLElement', FakeHTMLElement);
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: () => undefined,
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const inner = scene as unknown as {
+      walking: boolean;
+      onKeyDown: (e: Record<string, unknown>) => void;
+    };
+    scene.toggleWalk();
+    inner.onKeyDown({
+      code: 'Escape',
+      target: new FakeHTMLElement(),
+      preventDefault: () => undefined,
+    });
+    expect(inner.walking).toBe(true);
+
+    inner.onKeyDown({ code: 'Escape', target: null, preventDefault: () => undefined });
+    expect(inner.walking).toBe(false);
   });
 });

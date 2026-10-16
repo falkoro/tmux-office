@@ -1524,7 +1524,7 @@ export class OfficeScene {
     let best: number | null = null;
     let bestDist = Infinity;
     const test = (box: Box3, id: number) => {
-      if (!ray.intersectBox(box, this.hitPoint)) return;
+      if (box.containsPoint(ray.origin) || !ray.intersectBox(box, this.hitPoint)) return;
       const d = this.hitPoint.distanceToSquared(ray.origin);
       if (d < bestDist) {
         bestDist = d;
@@ -1620,13 +1620,13 @@ export class OfficeScene {
   };
 
   private readonly onKeyDown = (e: KeyboardEvent): void => {
-    if (!this.walking) return;
+    if (!this.walking || isTyping(e.target)) return;
     if (e.code === 'Escape') {
       e.preventDefault();
       this.leaveWalk();
       return;
     }
-    if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (!WALK_CODES.has(e.code)) return;
     e.preventDefault();
     this.keys.add(e.code);

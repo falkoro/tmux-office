@@ -39,7 +39,10 @@ server/                              Lifecycle runtime + Fastify HTTP/WS server
     sessionRouter.ts                 session_id → agent_id mapping, event buffering, pending external sessions
     dismissalTracker.ts              Unified dismissal state (replaces four legacy globals)
     hookEventHandler.ts              Dispatches normalized AgentEvent into runtime
-    httpServer.ts                    Fastify: POST /api/hooks/:providerId, GET /api/health, GET /ws, SPA (standalone)
+    httpServer.ts                    Fastify: POST /api/hooks/:providerId, GET /api/health, GET /api/office, GET /ws, GET /ws/term, SPA (standalone)
+    officeFeed.ts                    /api/office JSON snapshot: desks with room, session, pin and status
+    tmuxTerminal.ts                  /ws/term: attaches an agent's tmux pane through node-pty (loaded on first attach)
+    accessJwt.ts                     Cloudflare Access JWT check (JWKS cache), run on every route but the hook post
     clientMessageHandler.ts          Single dispatch point for ClientMessage from webview
     server.ts                        Top-level composition
     cli.ts                           Standalone CLI entry (`node dist/cli.js`)
@@ -53,7 +56,7 @@ server/                              Lifecycle runtime + Fastify HTTP/WS server
     teamUtils.ts                     isInlineTeammateOf, getInlineTeammates, hasInlineTeammates
     types.ts                         ServerAgentState
     constants.ts                     All timing/scanning constants
-  __tests__/                         28 Vitest files
+  __tests__/                         39 Vitest files
   manual-hook-events.http            Manual hook testing helper (REST-Client format)
 
 adapters/vscode/                     VS Code surface — composes core + server
@@ -89,6 +92,7 @@ webview-ui/                          React 19 + Canvas UI (depends only on core/
       useEditorKeyboard.ts           Keyboard shortcuts (R, T, Esc, Ctrl+Z/Y)
       introTourState.ts              Intro tour wire-state machine (pure reducer, Node-runner tested)
       useIntroTour.ts                Wires the reducer to React + transport (snapshot, verdict, choices)
+    office3d/                        three.js 3D office: scene, layout (rooms, pods, rosters), walk mode, characters
     office/
       types.ts                       OfficeLayout, Character, etc. + re-exports constants
       toolUtils.ts                   STATUS_TO_TOOL mapping, extractToolName (DOM-free; defaultZoom lives in useEditorActions)
@@ -193,8 +197,8 @@ Adding a new CLI integration is one subdirectory under `server/src/providers/hoo
 
 `core/asyncapi.yaml` is the contract. Pinned to **3.0.0** because `@asyncapi/modelina@5.10.1` declares `supportedVersions: ['3.0.0']` only; bumping to 3.1.0 produces `export type Root = any`. Revisit when Modelina ships 3.1.0 support.
 
-- **27 ServerMessage variants** (server → client): agent lifecycle, agent activity, sub-agent activity, team + context usage, assets, settings + workspace, diagnostics.
-- **18 ClientMessage variants** (client → server): lifecycle (`webviewReady`, `launchAgent`, `focusAgent`, `closeAgent`), layout (`saveAgentSeats`, `saveLayout`, `exportLayout`, `importLayout`), settings (`setSoundEnabled`, `setHooksEnabled`, `setWatchAllSessions`, `setAlwaysShowLabels`, `setHooksInfoShown`, `setLastSeenVersion`), discovery + assets, diagnostics.
+- **33 ServerMessage variants** (server → client): agent lifecycle (including `agentTerminal`, an agent's tmux location and name), agent activity, sub-agent activity, team + context usage, assets, settings + workspace (including `officeRooms`, the 3D office's room config), diagnostics.
+- **22 ClientMessage variants** (client → server): lifecycle (`webviewReady`, `launchAgent`, `focusAgent`, `closeAgent`), layout (`saveAgentSeats`, `saveLayout`, `exportLayout`, `importLayout`), settings (`setSoundEnabled`, `setHooksEnabled`, `setWatchAllSessions`, `setAlwaysShowLabels`, `setHooksInfoShown`, `setLastSeenVersion`), discovery + assets, diagnostics.
 
 Both unions use `oneOf` with `discriminator: type`. Every concrete message sets `additionalProperties: false`.
 
@@ -296,7 +300,9 @@ Fastify v5 with `@fastify/cors`, `@fastify/websocket`, and (in standalone) `@fas
 | ------ | ------------------------ | --------------------------------------- |
 | POST   | `/api/hooks/:providerId` | Bearer-authenticated hook event ingress |
 | GET    | `/api/health`            | Liveness: `{ ok, version, port, pid }`  |
+| GET    | `/api/office`            | Office feed JSON (desks, rooms, status) |
 | GET    | `/ws`                    | Bidirectional protocol channel          |
+| GET    | `/ws/term`               | An agent's tmux pane as a terminal      |
 | GET    | `/*` (standalone only)   | Webview SPA via `@fastify/static`       |
 
 `/ws` is gated in **two tiers**, because `setHooksEnabled(true)` over this socket is a durable, machine-wide consent grant plus a hook install.

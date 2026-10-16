@@ -23,8 +23,6 @@ export function toMajorMinor(version: string): string {
 
 export const CHANGELOG_REPO_URL = 'https://github.com/falkoro/tmux-office';
 
-export const DISCORD_INVITE_URL = 'https://discord.gg/Yk7jXebv9H';
-
 export const changelogEntries: ChangelogEntry[] = [
   {
     version: '1.4',

@@ -102,6 +102,8 @@ export const WS_CLOSE_FORBIDDEN_ORIGIN = 4003;
 export const WS_CLOSE_MESSAGE_TOO_BIG = 1009;
 export const TERMINAL_PENDING_INPUT_MAX_BYTES = 64 * 1024;
 export const TERMINAL_OUTPUT_BUFFER_MAX_BYTES = 8 * 1024 * 1024;
+/** Largest single WebSocket frame /ws and /ws/term accept. */
+export const WS_MAX_PAYLOAD_BYTES = 4 * 1024 * 1024;
 
 export const HOOK_EVENT_BUFFER_MS = 5_000;
 /** Grace period after SessionEnd(reason=clear/resume) before triggering onSessionEnd.

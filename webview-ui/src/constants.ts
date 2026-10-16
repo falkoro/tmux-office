@@ -399,7 +399,6 @@ export const OFFICE3D_CHARACTER_KEY = 'pixel-agents.office3d.character:';
 /**
  * Eye height while walking, in metres: a little (0.15) above a seated overseer's crown.
  * Crown = floor + seat + (head centre - hip) + helmet half-height.
- * The walk test pins this to those sizes in characters.ts.
  */
 export const OFFICE3D_WALK_EYE_Y =
   OFFICE3D_FLOOR_Y + 0.475 + (0.81 - 0.3) + (0.01 + 0.48 / 2) + 0.15;

@@ -525,6 +525,64 @@ describe('live-only', () => {
     expect(lifecycle).toEqual([]);
   });
 
+  it('keeps the agent through /clear when the new transcript appears a tick after the registry switches', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    planted.runtime.hooksEnabled.current = false;
+    const agent = [...planted.store.values()][0]!;
+    const tmuxBefore = agent.tmux;
+    const lifecycle: string[] = [];
+    planted.store.on('agentAdded', (id) => lifecycle.push(`added ${id}`));
+    planted.store.on('agentRemoved', (id) => lifecycle.push(`removed ${id}`));
+    const nextSession = '66666666-6666-6666-6666-666666666666';
+    const nextJsonl = path.join(planted.projectDir, `${nextSession}.jsonl`);
+    fs.writeFileSync(
+      planted.sessionFile,
+      JSON.stringify({
+        pid: process.pid,
+        sessionId: nextSession,
+        cwd: planted.cwd,
+        tmux: 'demo:@2.%3',
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(lifecycle).toEqual([]);
+    expect(planted.store.get(agent.id)?.tmux).toEqual(tmuxBefore);
+
+    fs.writeFileSync(nextJsonl, '{"type":"user"}\n');
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(lifecycle).toEqual([]);
+    expect(planted.store.get(agent.id)?.sessionId).toBe(nextSession);
+    expect(planted.store.get(agent.id)?.jsonlFile).toBe(nextJsonl);
+    expect(planted.store.get(agent.id)?.tmux).toEqual(tmuxBefore);
+  });
+
+  it('follows /clear and then a resume back to the cleared session with hooks off', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    planted.runtime.hooksEnabled.current = false;
+    const agent = [...planted.store.values()][0]!;
+    const lifecycle: string[] = [];
+    planted.store.on('agentAdded', (id) => lifecycle.push(`added ${id}`));
+    planted.store.on('agentRemoved', (id) => lifecycle.push(`removed ${id}`));
+    const live = (sessionId: string) =>
+      fs.writeFileSync(
+        planted.sessionFile,
+        JSON.stringify({ pid: process.pid, sessionId, cwd: planted.cwd, tmux: 'demo:@2.%3' }),
+      );
+    const nextSession = '77777777-7777-7777-7777-777777777777';
+    fs.writeFileSync(path.join(planted.projectDir, `${nextSession}.jsonl`), '{"type":"user"}\n');
+    live(nextSession);
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(planted.store.get(agent.id)?.sessionId).toBe(nextSession);
+
+    live(planted.sessionId);
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(lifecycle).toEqual([]);
+    expect(planted.store.get(agent.id)?.sessionId).toBe(planted.sessionId);
+    expect(planted.store.get(agent.id)?.jsonlFile).toBe(planted.jsonl);
+  });
+
   it('keeps an agent whose session id was already reassigned to the new registry session', async () => {
     vi.useFakeTimers();
     const planted = plant(true);
@@ -554,6 +612,7 @@ describe('live-only', () => {
     vi.useFakeTimers();
     const planted = plant(true);
     const agent = [...planted.store.values()][0]!;
+    agent.hookDelivered = true;
     const tmuxBefore = agent.tmux;
     expect(tmuxBefore).toBeTruthy();
     const nextSession = '44444444-4444-4444-4444-444444444444';

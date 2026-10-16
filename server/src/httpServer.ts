@@ -22,6 +22,7 @@ import {
   WS_CLOSE_FORBIDDEN_ORIGIN,
   WS_CLOSE_MESSAGE_TOO_BIG,
   WS_CLOSE_UNAUTHORIZED,
+  WS_MAX_PAYLOAD_BYTES,
 } from './constants.js';
 import { agentCreatedTerminalFields } from './liveSessionSync.js';
 import type { OfficeFeedState } from './officeFeed.js';
@@ -83,7 +84,7 @@ export async function createHttpServer(options: HttpServerOptions): Promise<Http
   });
 
   await app.register(fastifyCors, { origin: true });
-  await app.register(fastifyWebsocket);
+  await app.register(fastifyWebsocket, { options: { maxPayload: WS_MAX_PAYLOAD_BYTES } });
 
   // Static SPA serving (standalone mode only)
   if (!options.embedded && options.staticDir) {
@@ -468,15 +469,19 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
       if (!isBinary || stopped) return;
       const bytes = toBuffer(data);
       if (bytes.length === 0) return;
-      pending.push(bytes);
-      pendingBytes += bytes.length;
-      flush();
-      if (pendingBytes > TERMINAL_PENDING_INPUT_MAX_BYTES) {
+      if (
+        !(attached && drawing) &&
+        pendingBytes + bytes.length > TERMINAL_PENDING_INPUT_MAX_BYTES
+      ) {
         detach();
         pending.length = 0;
         pendingBytes = 0;
         socket.close(WS_CLOSE_MESSAGE_TOO_BIG);
+        return;
       }
+      pending.push(bytes);
+      pendingBytes += bytes.length;
+      flush();
     });
 
     void attachTmuxPane(

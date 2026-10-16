@@ -310,7 +310,6 @@ export class AgentRuntime {
     this.hookEventHandler.handleEvent(providerId, event as HookEvent);
   }
 
-  /** Register an agent with the hook event handler for session->agent mapping. */
   /** /clear or /resume: the agent continues in `newSessionId`, keeping its id, seat and terminal. */
   private moveAgentToSession(
     agentId: number,
@@ -340,6 +339,7 @@ export class AgentRuntime {
     this.registerAgent(agent.sessionId, agent.id);
   }
 
+  /** Register an agent with the hook event handler for session->agent mapping. */
   registerAgent(sessionId: string, agentId: number): void {
     this.hookEventHandler.registerAgent(sessionId, agentId);
   }
@@ -588,8 +588,8 @@ export class AgentRuntime {
    * stays while the registry still shows the session it was moved from, until
    * the registry has shown its new one. An agent whose hooks reported /clear
    * stays until its SessionStart moves it; without hooks the tick moves it
-   * first (see followSessionSwitch). The transcript is not dismissed: a new pid with the same session id
-   * must be adopted on a later tick.
+   * first (see followSessionSwitch). The transcript is not dismissed: a new
+   * pid with the same session id must be adopted on a later tick.
    */
   private removeSessionsThatLeft(registry: ClaudeSessionRegistry): void {
     if (!this.liveOnly.current) return;
@@ -611,47 +611,57 @@ export class AgentRuntime {
     }
   }
 
-  /** Transcript of a registry session that no agent tracks or is about to claim and the user did not dismiss. */
-  private untrackedTranscript(session: LiveClaudeSession): string | null {
-    const jsonlFile = transcriptPathForSession(session);
-    if (!jsonlFile) return null;
-    const projectDir = path.dirname(jsonlFile);
+  /**
+   * Whether a registry session is free: no agent is on it, was just moved off
+   * it, tracks its transcript or is about to claim it, and the user did not
+   * dismiss it. `jsonlFile` is null while the session has no transcript yet.
+   */
+  private unclaimed(session: LiveClaudeSession, jsonlFile: string | null): boolean {
     for (const agent of this.store.values()) {
-      if (agent.sessionId === session.sessionId || pathsMatch(agent.jsonlFile, jsonlFile)) {
-        return null;
-      }
-      if (agent.pendingClear && pathsMatch(agent.projectDir, projectDir)) return null;
+      if (agent.sessionId === session.sessionId) return false;
+      if (agent.clearedFromSessionId === session.sessionId) return false;
+      if (!jsonlFile) continue;
+      if (pathsMatch(agent.jsonlFile, jsonlFile)) return false;
+      if (agent.pendingClear && pathsMatch(agent.projectDir, path.dirname(jsonlFile))) return false;
     }
-    if (this.dismissalTracker.isDismissed(jsonlFile)) return null;
-    if (this.dismissalTracker.isPermanentlyDismissed(jsonlFile)) return null;
-    return jsonlFile;
+    return !jsonlFile || !this.dismissalTracker.isDismissed(jsonlFile);
   }
 
   /**
    * Without hooks, /clear and /resume show only as the registry listing a new
    * session under the pid of an agent whose session left. Move that agent
-   * instead of letting the new session adopt a second one. Agents fed by
-   * hooks are moved by their SessionStart.
+   * instead of letting the new session adopt a second one. Claude writes the
+   * new transcript only on the first prompt, so until then the agent moves to
+   * the session and keeps its old file, and a later tick swaps the file in.
+   * Agents fed by hooks are moved by their SessionStart.
    */
   private followSessionSwitch(
     session: LiveClaudeSession,
     live: ReadonlyMap<string, LiveClaudeSession>,
   ): void {
-    const agent = [...this.store.values()].find(
+    const jsonlFile = transcriptPathForSession(session);
+    const own = (a: AgentState) => a.leadAgentId === undefined && !a.hookDelivered;
+    const awaitingFile = [...this.store.values()].find(
       (a) =>
-        a.livePid === session.pid &&
-        a.leadAgentId === undefined &&
-        !a.hookDelivered &&
-        !live.has(a.sessionId),
+        own(a) &&
+        a.sessionId === session.sessionId &&
+        path.basename(a.jsonlFile, '.jsonl') !== a.sessionId,
     );
-    if (!agent) return;
-    const jsonlFile = this.untrackedTranscript(session);
-    if (jsonlFile) this.moveAgentToSession(agent.id, session.sessionId, jsonlFile);
+    if (awaitingFile) {
+      if (jsonlFile) this.moveAgentToSession(awaitingFile.id, session.sessionId, jsonlFile);
+      return;
+    }
+    const agent = [...this.store.values()].find(
+      (a) => own(a) && a.livePid === session.pid && !live.has(a.sessionId),
+    );
+    if (agent && this.unclaimed(session, jsonlFile)) {
+      this.moveAgentToSession(agent.id, session.sessionId, jsonlFile ?? undefined);
+    }
   }
 
   private adoptLiveSession(session: LiveClaudeSession): void {
-    const jsonlFile = this.untrackedTranscript(session);
-    if (!jsonlFile) return;
+    const jsonlFile = transcriptPathForSession(session);
+    if (!jsonlFile || !this.unclaimed(session, jsonlFile)) return;
     const projectDir = path.dirname(jsonlFile);
     const watching =
       this.liveOnly.current ||
