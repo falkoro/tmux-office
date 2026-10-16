@@ -331,15 +331,15 @@ export function planOffice(rooms: RoomModel[], aspect: number): OfficePlan {
     if (!background) return null;
     const shape = shapeRoom(background, 1e6, narrow, OFFICE3D_BACKGROUND_SCALE);
     // As wide as the grid: re-pack the pods into that width.
-    const innerMax = Math.max(width, shape.width) - 2 * OFFICE3D_ROOM_PAD_X;
     const boxes = shape.rows.flat();
-    const rows = boxes.length > 0 ? packRows(boxes, innerMax) : [];
-    const inner = OFFICE3D_ROOM_PAD_BACK * OFFICE3D_BACKGROUND_SCALE + rowsDepth(rows);
+    if (boxes.length === 0) return { ...shape, width: Math.max(width, shape.width) };
+    const widest = Math.max(...boxes.map((b) => b.width)) + 2 * OFFICE3D_ROOM_PAD_X;
+    const rows = packRows(boxes, Math.max(width, widest) - 2 * OFFICE3D_ROOM_PAD_X);
     return {
       ...shape,
       rows,
-      width: Math.max(width, shape.width),
-      inner: rows.length > 0 ? inner : shape.inner,
+      width: Math.max(width, Math.max(...rows.map(rowWidth)) + 2 * OFFICE3D_ROOM_PAD_X),
+      inner: OFFICE3D_ROOM_PAD_BACK * OFFICE3D_BACKGROUND_SCALE + rowsDepth(rows),
     };
   };
 

@@ -282,6 +282,18 @@ describe('planOffice', () => {
     assert.ok(frontFloor(11) - frontFloor(1) > OFFICE3D_ROSTER_LINE_DEPTH / 2);
   });
 
+  test('a porch of many pods wraps to the width of the rooms', () => {
+    const porchPods = Array.from({ length: 6 }, (_, i) => pod(`other-${i}`, 1));
+    const plan = planOffice(
+      [room('work', pod('work-1', 1)), room(BACKGROUND_ROOM_ID, ...porchPods)],
+      DESKTOP,
+    );
+    assertSound(plan, 'wrapped porch');
+    const [work, porch] = plan.rooms;
+    assert.ok(porch.width <= work.width + 1e-9);
+    assert.ok(new Set(porch.pods.map((p) => p.z)).size > 1);
+  });
+
   test('the porch alone sits at the origin', () => {
     const plan = planOffice([room(BACKGROUND_ROOM_ID, pod(':no-pane', 3))], DESKTOP);
     assert.equal(plan.rooms[0].x, 0);

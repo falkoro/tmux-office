@@ -56,7 +56,9 @@ export function syncLiveSessionMetadata(
     const inLeadSession =
       agent.leadAgentId !== undefined &&
       store.get(agent.leadAgentId)?.sessionId === agent.sessionId;
-    const live = registry.get(agent.sessionId);
+    const live =
+      registry.get(agent.sessionId) ??
+      (agent.clearedFromSessionId ? registry.get(agent.clearedFromSessionId) : undefined);
     const nextTmux = live?.tmux ?? null;
     const nextName = inLeadSession ? null : (live?.name ?? null);
     const had = agent.tmux !== undefined || agent.registryName !== undefined;

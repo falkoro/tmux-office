@@ -509,6 +509,8 @@ describe('live-only', () => {
     vi.useFakeTimers();
     const planted = plant(true);
     const agent = [...planted.store.values()][0]!;
+    const tmuxBefore = agent.tmux;
+    expect(tmuxBefore).toBeTruthy();
     const nextSession = '44444444-4444-4444-4444-444444444444';
     const nextJsonl = path.join(planted.projectDir, `${nextSession}.jsonl`);
     fs.writeFileSync(nextJsonl, '{"type":"user"}\n');
@@ -525,6 +527,7 @@ describe('live-only', () => {
 
     await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
     expect([...planted.store.keys()]).toEqual([agent.id]);
+    expect(planted.store.get(agent.id)?.tmux).toEqual(tmuxBefore);
 
     fs.writeFileSync(
       planted.sessionFile,
