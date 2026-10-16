@@ -261,7 +261,7 @@ function App() {
       const focusId = meta ? meta.parentAgentId : agentId;
       transport.send({ type: 'focusAgent', id: focusId });
       if (!isBrowserRuntime) return;
-      // The canvas toggles selection before this runs. A deselect closes the panel.
+      // The canvas toggles selection before this runs. Clicking the same agent again closes the panel.
       if (os.selectedAgentId !== agentId) {
         setOpenTerminalId(null);
         return;

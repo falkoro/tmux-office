@@ -121,7 +121,7 @@ export class AgentRuntime {
 
   constructor(
     private readonly store: AgentStateStore,
-    provider: HookProvider,
+    private readonly provider: HookProvider,
   ) {
     // Wire module-level dependencies
     setDismissalTracker(this.dismissalTracker);
@@ -583,8 +583,10 @@ export class AgentRuntime {
 
   /**
    * Drop top-level agents whose session is no longer in the registry.
-   * Children stay while their lead stays, and leave with the lead. A child
-   * whose lead is gone is judged by its own session. An agent moved by /clear
+   * Children stay while their lead stays. When the lead leaves, a child whose
+   * own session is still live stays as a top-level agent; the others leave
+   * with the lead. A child whose lead is gone is judged by its own session.
+   * An agent moved by /clear
    * stays while the registry still shows the session it was moved from, until
    * the registry has shown its new one. An agent whose hooks reported /clear
    * stays until its SessionStart moves it; without hooks the tick moves it
@@ -602,6 +604,19 @@ export class AgentRuntime {
       departing.push(id);
     }
     for (const id of departing) {
+      for (const [childId, child] of this.store) {
+        if (child.leadAgentId !== id || !live.has(child.sessionId)) continue;
+        child.leadAgentId = undefined;
+        this.store.broadcast({
+          type: 'agentTeamInfo',
+          id: childId,
+          teamName: child.teamName,
+          agentName: child.agentName,
+          isTeamLead: child.isTeamLead,
+          leadAgentId: undefined,
+          teamUsesTmux: child.teamUsesTmux,
+        });
+      }
       this.removeTeammates(id);
       this.subagentWatch.removeByLead(id);
       const agent = this.store.get(id);
@@ -675,6 +690,14 @@ export class AgentRuntime {
       this.watchAllSessions.current ||
       isTrackedProjectDir(projectDir);
     if (!watching) return;
+    const teamMeta = this.hooksEnabled.current
+      ? this.provider.team?.getTeamMetadataForSession(jsonlFile)
+      : null;
+    if (teamMeta?.teamName && teamMeta.agentName) {
+      for (const agent of this.store.values()) {
+        if (agent.teamName === teamMeta.teamName && agent.leadAgentId === undefined) return;
+      }
+    }
 
     this.knownJsonlFiles.add(jsonlFile);
     this.dismissalTracker.clearSeededMtime(jsonlFile);

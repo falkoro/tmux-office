@@ -370,6 +370,9 @@ export class DeskView {
     this.pickEl.addEventListener('blur', () => {
       pointerOpened = false;
     });
+    this.pickEl.addEventListener('keydown', () => {
+      pointerOpened = false;
+    });
     this.pickEl.addEventListener('change', () => {
       const kind = this.pickEl.value;
       if (isCharacterKind(kind)) ctx.choose(this.name, kind);

@@ -482,6 +482,91 @@ describe('live-only', () => {
     expect(planted.store.size).toBe(1);
   });
 
+  it('keeps a live own-session teammate as a top-level agent when its lead session leaves', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    const lead = [...planted.store.values()][0]!;
+    const teammateSession = '55555555-5555-5555-5555-555555555555';
+    const teammateJsonl = path.join(planted.projectDir, `${teammateSession}.jsonl`);
+    fs.writeFileSync(teammateJsonl, '{"type":"user"}\n');
+    fs.writeFileSync(
+      path.join(path.dirname(planted.sessionFile), '2.json'),
+      JSON.stringify({ pid: process.pid, sessionId: teammateSession, cwd: planted.cwd }),
+    );
+    planted.store.set(
+      40,
+      bareAgent({
+        id: 40,
+        sessionId: teammateSession,
+        projectDir: planted.projectDir,
+        jsonlFile: teammateJsonl,
+        leadAgentId: lead.id,
+        agentName: 'researcher',
+      }),
+    );
+    const inlineFile = path.join(planted.projectDir, 'writer.jsonl');
+    fs.writeFileSync(inlineFile, '');
+    planted.store.set(
+      41,
+      bareAgent({
+        id: 41,
+        sessionId: lead.sessionId,
+        projectDir: planted.projectDir,
+        jsonlFile: inlineFile,
+        leadAgentId: lead.id,
+        agentName: 'writer',
+        spawnToolUseId: 'toolu_team',
+      }),
+    );
+
+    fs.rmSync(planted.sessionFile);
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect([...planted.store.keys()]).toEqual([40]);
+    expect(planted.store.get(40)!.leadAgentId).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(DISMISSED_COOLDOWN_MS + CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect([...planted.store.keys()]).toEqual([40]);
+  });
+
+  function plantTeammateSession(planted: Planted, teamName: string): string {
+    const teammateSession = '66666666-6666-6666-6666-666666666666';
+    const teammateJsonl = path.join(planted.projectDir, `${teammateSession}.jsonl`);
+    fs.writeFileSync(
+      teammateJsonl,
+      JSON.stringify({ type: 'user', teamName, agentName: 'researcher' }) + '\n',
+    );
+    fs.writeFileSync(
+      path.join(path.dirname(planted.sessionFile), '2.json'),
+      JSON.stringify({ pid: process.pid, sessionId: teammateSession, cwd: planted.cwd }),
+    );
+    return teammateJsonl;
+  }
+
+  it('leaves a teammate session of a tracked lead to team discovery when hooks are on', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    [...planted.store.values()][0]!.teamName = 'session-abcd1234';
+    const teammateJsonl = plantTeammateSession(planted, 'session-abcd1234');
+
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect(tracks(planted.store, teammateJsonl)).toBe(false);
+  });
+
+  it('adopts a teammate session of a tracked lead from the registry when hooks are off', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    planted.runtime.hooksEnabled.current = false;
+    [...planted.store.values()][0]!.teamName = 'session-abcd1234';
+    const teammateJsonl = plantTeammateSession(planted, 'session-abcd1234');
+
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect(tracks(planted.store, teammateJsonl)).toBe(true);
+  });
+
   it('leaves the agent in place when live-only is off and the session file disappears', async () => {
     vi.useFakeTimers();
     const planted = plant(false, true);
