@@ -3,7 +3,12 @@ import { randomBytes } from 'node:crypto';
 import { promisify } from 'node:util';
 
 import { TERM_SIZE_POLL_INTERVAL_MS, TMUX_LIST_PANES_TIMEOUT_MS } from './constants.js';
-import type { TmuxLocation } from './providers/hook/claude/claudeSessionRegistry.js';
+import {
+  type ProcReader,
+  realProc,
+  runsInPane,
+  type TmuxLocation,
+} from './providers/hook/claude/claudeSessionRegistry.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -233,13 +238,21 @@ export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
 }
 
 /**
- * Where a pane is now, within its stored session. Pane ids are unique only per
- * tmux server, so a pane listed under another session may belong to a different
- * server; the live registry follows confirmed moves. Throwaway sessions are never picked.
+ * Where a pane is now, within its stored session, once /proc shows the Claude
+ * process `pid` runs in it. Pane ids are unique only per tmux server; where
+ * /proc cannot tell (macOS) the session name decides. The live registry
+ * follows moves. Throwaway sessions are never picked.
  */
-export async function resolvePaneLocation(location: TmuxLocation): Promise<TmuxLocation | null> {
+export async function resolvePaneLocation(
+  location: TmuxLocation,
+  pid: number,
+  proc: ProcReader = realProc,
+): Promise<TmuxLocation | null> {
   const pane = (await listTmuxPanes())?.find(
-    (p) => p.paneId === location.paneId && p.session === location.session,
+    (p) =>
+      p.paneId === location.paneId &&
+      p.session === location.session &&
+      runsInPane(pid, p.panePid, proc) !== false,
   );
   return pane ? { session: pane.session, windowId: pane.windowId, paneId: pane.paneId } : null;
 }
@@ -280,13 +293,14 @@ export interface AttachedTerminal {
 
 export async function attachTmuxPane(
   stored: TmuxLocation,
+  pid: number,
   onData: (data: string) => void,
   onSize: (cols: number, rows: number) => void,
 ): Promise<AttachedTerminal> {
   if (!isSafeTmuxLocation(stored)) {
     throw new Error('unsafe tmux location');
   }
-  const location = await resolvePaneLocation(stored);
+  const location = await resolvePaneLocation(stored, pid);
   if (!location || !isSafeTmuxLocation(location)) {
     throw new Error('tmux pane not found');
   }

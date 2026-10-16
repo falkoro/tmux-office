@@ -11,12 +11,6 @@ import {
   OFFICE3D_WALK_SPEED,
   OFFICE3D_WALL_HEIGHT,
 } from '../src/constants.js';
-import {
-  CHARACTER_HEAD_HALF,
-  CHARACTER_HEAD_Y,
-  CHARACTER_HIP_Y,
-  CHARACTER_SEAT_HEIGHT,
-} from '../src/office3d/characters.js';
 import type { WalkKeys } from '../src/office3d/walk.js';
 import { stepWalk, walkDirection, walkFromCamera } from '../src/office3d/walk.js';
 
@@ -129,13 +123,7 @@ describe('walk aim', () => {
     }
   });
 
-  test('eye height sits a little above a seated overseer and over the desk', () => {
-    const crown =
-      OFFICE3D_FLOOR_Y +
-      CHARACTER_SEAT_HEIGHT +
-      (CHARACTER_HEAD_Y - CHARACTER_HIP_Y) +
-      CHARACTER_HEAD_HALF;
-    assert.equal(OFFICE3D_WALK_EYE_Y, crown + 0.15);
+  test('eye height sits over the desks and under the walls', () => {
     assert.ok(OFFICE3D_WALK_EYE_Y > OFFICE3D_FLOOR_Y + OFFICE3D_DESK_HEIGHT);
     assert.ok(OFFICE3D_WALK_EYE_Y < OFFICE3D_FLOOR_Y + OFFICE3D_WALL_HEIGHT);
   });

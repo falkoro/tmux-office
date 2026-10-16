@@ -39,17 +39,20 @@ describe.skipIf(!hasTmux)('attaching a pane', () => {
     }).trim();
   let paneId = '';
   let windowId = '';
+  let panePid = 0;
 
   beforeAll(() => {
     process.env.PIXEL_AGENTS_TMUX_SOCKET = socketName;
     tmux('new-session', '-d', '-s', 'demo', '-x', '80', '-y', '24');
-    [paneId, windowId] = tmux(
+    let pid: string;
+    [paneId, windowId, pid] = tmux(
       'display-message',
       '-p',
       '-t',
       'demo',
-      '#{pane_id} #{window_id}',
-    ).split(' ') as [string, string];
+      '#{pane_id} #{window_id} #{pane_pid}',
+    ).split(' ') as [string, string, string];
+    panePid = Number(pid);
   });
 
   afterAll(() => {
@@ -62,6 +65,7 @@ describe.skipIf(!hasTmux)('attaching a pane', () => {
     const { attachTmuxPane } = await import('../src/tmuxTerminal.js');
     const term = await attachTmuxPane(
       { session: 'demo', windowId, paneId },
+      panePid,
       () => undefined,
       () => undefined,
     );
@@ -69,21 +73,20 @@ describe.skipIf(!hasTmux)('attaching a pane', () => {
     expect(nodePty.loads).toBe(1);
   });
 
-  it('groups with the session that holds the pane now, not a stale stored one', async () => {
+  it('does not follow a pane moved out of its stored session; the registry tick does', async () => {
     tmux('new-window', '-d', '-t', 'demo');
     tmux('new-session', '-d', '-s', 'moved', '-x', '80', '-y', '24');
     tmux('move-window', '-s', `demo:${windowId}`, '-t', 'moved:');
     const { attachTmuxPane } = await import('../src/tmuxTerminal.js');
     nodePty.spawns.length = 0;
-    const term = await attachTmuxPane(
-      { session: 'demo', windowId, paneId },
-      () => undefined,
-      () => undefined,
-    );
-    term.stop();
-    const argv = nodePty.spawns[0]!;
-    expect(argv[argv.indexOf('new-session') + 2]).toBe('=moved');
-    expect(argv[argv.indexOf('select-window') + 2]).toBe(windowId);
-    expect(argv[argv.indexOf('select-pane') + 2]).toBe(paneId);
+    await expect(
+      attachTmuxPane(
+        { session: 'demo', windowId, paneId },
+        panePid,
+        () => undefined,
+        () => undefined,
+      ),
+    ).rejects.toThrow('tmux pane not found');
+    expect(nodePty.spawns).toEqual([]);
   });
 });

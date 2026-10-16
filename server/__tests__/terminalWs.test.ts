@@ -205,12 +205,12 @@ describe.skipIf(!hasTmux)('/ws/term attach', () => {
         '-p',
         '-t',
         'demo',
-        '#{session_name} #{window_id} #{pane_id} #{window_width} #{window_height}',
+        '#{session_name} #{window_id} #{pane_id} #{window_width} #{window_height} #{pane_pid}',
       ])
     )
       .trim()
       .split(/\s+/);
-    const [session, windowId, pane, widthRaw, heightRaw] = fields;
+    const [session, windowId, pane, widthRaw, heightRaw, panePid] = fields;
     if (!session || !windowId || !pane)
       throw new Error(`unexpected tmux identity: ${fields.join(' ')}`);
     paneId = pane;
@@ -226,7 +226,11 @@ describe.skipIf(!hasTmux)('/ws/term attach', () => {
 
     const sessionId = '22222222-2222-2222-2222-222222222222';
     const store = new AgentStateStore();
-    store.set(1, { ...bareAgent(sessionId), tmux: { session: 'other', windowId, paneId: pane } });
+    store.set(1, {
+      ...bareAgent(sessionId),
+      tmux: { session: 'other', windowId, paneId: pane },
+      livePid: Number(panePid),
+    });
     handle = await createHttpServer({
       embedded: true,
       host: '127.0.0.1',

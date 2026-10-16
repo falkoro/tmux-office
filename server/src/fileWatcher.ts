@@ -1092,9 +1092,7 @@ export function adoptExternalSessionFromHook(
 
     knownJsonlFiles.add(transcriptPath);
     const projectDir = path.dirname(transcriptPath);
-    const folderName =
-      folderNameResolver?.({ cwd, projectDir }) ??
-      folderNameFromProjectDir(path.basename(projectDir));
+    const folderName = externalFolderName(projectDir, cwd);
 
     adoptExternalSession(
       transcriptPath,
@@ -1479,6 +1477,13 @@ function folderNameFromProjectDir(dirName: string): string {
   return parts[parts.length - 1] || dirName;
 }
 
+/** The folder an external session is shown under: the host's name for it, else the project dir's tail. */
+export function externalFolderName(projectDir: string, cwd?: string): string {
+  return (
+    folderNameResolver?.({ cwd, projectDir }) ?? folderNameFromProjectDir(path.basename(projectDir))
+  );
+}
+
 /** Scan every session root the active provider exposes for active sessions
  *  (global discovery — powers the "Watch All Sessions" toggle). */
 function scanGlobalProjectDirs(
@@ -1541,9 +1546,7 @@ function scanGlobalProjectDirs(
         continue;
       }
 
-      const folderName =
-        folderNameResolver?.({ projectDir: dirPath }) ??
-        folderNameFromProjectDir(path.basename(dirPath));
+      const folderName = externalFolderName(dirPath);
       knownJsonlFiles.add(file);
       console.log(
         `[Pixel Agents] Watcher: detected global session ${path.basename(file)} (${folderName})`,

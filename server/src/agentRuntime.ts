@@ -21,6 +21,7 @@ import {
   adoptExternalSession,
   adoptExternalSessionFromHook,
   ensureProjectScan,
+  externalFolderName,
   isTrackedProjectDir,
   reassignAgentToFile,
   scanForBackgroundAgentFiles,
@@ -626,6 +627,7 @@ export class AgentRuntime {
       this.waitingTimers,
       this.permissionTimers,
       () => this.store.persist(),
+      externalFolderName(projectDir, session.cwd),
     );
     const adopted = [...this.store.values()].find(
       (agent) => agent.sessionId === session.sessionId || pathsMatch(agent.jsonlFile, jsonlFile),
@@ -633,6 +635,7 @@ export class AgentRuntime {
     if (!adopted) return;
     adopted.sessionId = session.sessionId;
     adopted.tmux = session.tmux;
+    adopted.livePid = session.pid;
     adopted.registryName = session.name;
     this.registerAgent(adopted.sessionId, adopted.id);
     this.store.broadcast({

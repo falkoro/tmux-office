@@ -136,6 +136,34 @@ describe('resolveLiveTmuxLocations', () => {
     });
   });
 
+  describe('a pane listed under the registry session', () => {
+    const stat = (pid: number, ppid: number) => `${pid} (node) S ${ppid} 1 1 0`;
+    const proc = (parents: Record<number, number>): ProcReader => ({
+      stat: (pid) => (pid in parents ? stat(pid, parents[pid]!) : null),
+      pidNamespace: () => null,
+    });
+    const claude = [{ sessionId: 's1', pid: 300, tmux: registryTmux }];
+    const sameName: TmuxPaneRecord = {
+      paneId: registryTmux.paneId,
+      panePid: 200,
+      session: registryTmux.session,
+      windowId: '@7',
+    };
+
+    it('drops it on Linux when Claude does not run in it: another server, same name and id', () => {
+      const locations = resolveLiveTmuxLocations(claude, [sameName], proc({ 300: 250, 250: 1 }));
+      expect(locations.get('s1')).toBeNull();
+    });
+
+    it('keeps it where /proc cannot tell, as on macOS', () => {
+      expect(resolveLiveTmuxLocations(claude, [sameName], proc({})).get('s1')).toEqual({
+        session: registryTmux.session,
+        windowId: '@7',
+        paneId: registryTmux.paneId,
+      });
+    });
+  });
+
   it('leaves a session that has no tmux unset', () => {
     const locations = resolveLiveTmuxLocations(
       [{ sessionId: 's1', pid: PID, tmux: null }],
@@ -307,10 +335,14 @@ describe('tmux pane list', () => {
         { paneId, panePid, session: 'work-5', windowId },
       ]);
       await expect(
-        resolvePaneLocation({ session: 'work-5', windowId: '@0', paneId: paneId! }),
+        resolvePaneLocation({ session: 'work-5', windowId: '@0', paneId: paneId! }, panePid),
       ).resolves.toEqual({ session: 'work-5', windowId, paneId });
       await expect(
-        resolvePaneLocation({ session: 'other-6', windowId, paneId: paneId! }),
+        resolvePaneLocation({ session: 'other-6', windowId, paneId: paneId! }, panePid),
+      ).resolves.toBeNull();
+      // This test process does not run in that pane: same name and id, another Claude.
+      await expect(
+        resolvePaneLocation({ session: 'work-5', windowId, paneId: paneId! }, process.pid),
       ).resolves.toBeNull();
     } finally {
       if (previous === undefined) delete process.env.PIXEL_AGENTS_TMUX_SOCKET;
@@ -383,6 +415,18 @@ describe('live pane following', () => {
       name: 'zeta',
       tmux: { session: 'work-5', windowId: '@9', paneId: '%5' },
     });
+  });
+
+  it('shows a session the registry adopts under its working folder', async () => {
+    vi.useFakeTimers();
+    const registry = writeSession(tempDir(), 'work-3:@5.%5');
+    const store = new AgentStateStore();
+    runtime = new AgentRuntime(store, claudeProvider);
+    runtime.forceWatchAll = true;
+    runtime.startLiveSessionRegistry(registry, () => Promise.resolve([movedPane]));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect([...store.values()][0]?.folderName).toBe('work');
   });
 
   it('adopts a new session at the pane current location', async () => {

@@ -9,7 +9,7 @@ let paneOutput: ((data: string) => void) | null = null;
 
 vi.mock('../src/tmuxTerminal.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/tmuxTerminal.js')>()),
-  attachTmuxPane: (_location: unknown, onData: (data: string) => void) =>
+  attachTmuxPane: (_location: unknown, _pid: number, onData: (data: string) => void) =>
     new Promise<AttachedTerminal>((resolve) => {
       paneOutput = onData;
       finishAttach = resolve;
@@ -24,6 +24,7 @@ describe('/ws/term input during attach', () => {
   store.set(1, {
     id: 1,
     tmux: { session: 'demo', windowId: '@1', paneId: '%1' },
+    livePid: 1234,
   } as unknown as Parameters<typeof store.set>[1]);
   const ready = createHttpServer({
     embedded: true,

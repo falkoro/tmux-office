@@ -139,6 +139,28 @@ export function procParentPid(stat: string): number | null {
   return Number.isInteger(ppid) ? ppid : null;
 }
 
+const MAX_PROCESS_DEPTH = 64;
+
+/**
+ * Whether `pid` is `panePid` or descends from it. Null when /proc cannot read
+ * `pid` at all (a host without /proc, such as macOS), so the caller cannot tell.
+ */
+export function runsInPane(
+  pid: number,
+  panePid: number,
+  proc: ProcReader = realProc,
+): boolean | null {
+  if (proc.stat(pid) === null) return null;
+  for (let at = pid, depth = 0; at > 1 && depth < MAX_PROCESS_DEPTH; depth++) {
+    if (at === panePid) return true;
+    const stat = proc.stat(at);
+    const parent = stat ? procParentPid(stat) : null;
+    if (parent === null) return false;
+    at = parent;
+  }
+  return false;
+}
+
 /**
  * The pid is alive and, where the session file and /proc can tell, it is the
  * same process in the same pid namespace that wrote the file.

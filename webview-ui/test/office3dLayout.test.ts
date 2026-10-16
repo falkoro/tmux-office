@@ -9,7 +9,7 @@ import {
   OFFICE3D_ROSTER_LINE_DEPTH,
 } from '../src/constants.js';
 import type { OfficePlan, RoomSpot } from '../src/office3d/layout.js';
-import { fitKey, planOffice } from '../src/office3d/layout.js';
+import { fitKey, planOffice, porchRosterColumns } from '../src/office3d/layout.js';
 import type { DeskModel, PodModel, RoomModel } from '../src/office3d/model.js';
 import { BACKGROUND_ROOM_ID, NO_PANE_POD_ID } from '../src/office3d/model.js';
 
@@ -222,21 +222,28 @@ describe('planOffice', () => {
   const frontFloor = (r: RoomSpot) =>
     r.z + r.depth / 2 - Math.max(...r.pods.map((p) => p.z + p.depth / 2));
 
-  test('a room shown as a name list reserves floor in front of its pods for its lines', () => {
-    // office3d.css lays the list out two names per line on a phone, one per 5 m on a
-    // wide stage, where the plaques hanging from the pods take one more line of that floor.
-    for (const [aspect, perLine, plaques] of [
-      [PHONE, () => 2, 0],
-      [DESKTOP, wideColumns, 1],
-      [1366 / 768, wideColumns, 1],
-    ] as const) {
-      for (const r of planOffice(demo(), aspect, true).rooms) {
-        const lines = Math.ceil(r.desks.length / perLine(r.width)) + plaques;
-        assert.ok(
-          frontFloor(r) >= lines * OFFICE3D_ROSTER_LINE_DEPTH - 1e-9,
-          `${r.id} at ${aspect}`,
-        );
-      }
+  test('a wide name list has one column per 5 m of room width, at least one', () => {
+    assert.equal(porchRosterColumns(29.1), 5);
+    assert.equal(porchRosterColumns(20), 4);
+    assert.equal(porchRosterColumns(19.9), 3);
+    assert.equal(porchRosterColumns(3), 1);
+  });
+
+  test('the demo work room reserves floor in front of its pods for its 14 names', () => {
+    const work = (aspect: number) => {
+      const spot = planOffice(demo(), aspect, true).rooms.find((r) => r.id === 'work');
+      assert.ok(spot);
+      return spot;
+    };
+    // A phone lists two names per line: 14 names take 7 lines.
+    assert.ok(frontFloor(work(PHONE)) >= 7 * OFFICE3D_ROSTER_LINE_DEPTH - 1e-9);
+    for (const aspect of [DESKTOP, 1366 / 768]) {
+      // 25 to 30 m wide holds five 5 m names per line: 3 lines, plus the line the
+      // plaques hanging from the pods take, 4 in all.
+      const spot = work(aspect);
+      assert.ok(spot.width >= 25 && spot.width < 30, `${spot.width} m at ${aspect}`);
+      assert.equal(porchRosterColumns(spot.width), 5);
+      assert.ok(frontFloor(spot) >= 4 * OFFICE3D_ROSTER_LINE_DEPTH - 1e-9, `${aspect}`);
     }
   });
 

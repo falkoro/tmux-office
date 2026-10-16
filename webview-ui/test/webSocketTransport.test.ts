@@ -46,10 +46,25 @@ describe('WebSocketTransport', () => {
     FakeSocket.sockets[0]!.drop();
 
     transport.send({ type: 'setSoundEnabled', enabled: false });
+    // A restarted server reuses agent ids, so these would hit someone else's agent.
+    transport.send({ type: 'closeAgent', id: 5 });
+    transport.send({ type: 'focusAgent', id: 5 });
+    transport.send({ type: 'saveAgentSeats', seats: {} });
     await vi.runOnlyPendingTimersAsync();
     FakeSocket.sockets[1]!.open();
 
     expect(FakeSocket.sockets[1]!.sent).toEqual(['setSoundEnabled', 'webviewReady']);
+    transport.dispose();
+  });
+
+  it('sends agent-id messages queued before the first connection', () => {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const transport = new WebSocketTransport('ws://test/ws');
+    transport.connect();
+    transport.send({ type: 'focusAgent', id: 1 });
+    FakeSocket.sockets[0]!.open();
+
+    expect(FakeSocket.sockets[0]!.sent).toEqual(['focusAgent']);
     transport.dispose();
   });
 });

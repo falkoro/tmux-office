@@ -435,7 +435,8 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
     const agentId = terminalAgentId(request.url);
     const agent = agentId === null ? undefined : options.store.get(agentId);
     const location = agent?.tmux;
-    if (!agent || !location) {
+    const pid = agent?.livePid;
+    if (!agent || !location || pid === undefined) {
       safeSend(socket, { type: 'error', message: 'no terminal for this agent' });
       socket.close();
       return;
@@ -480,6 +481,7 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
 
     void attachTmuxPane(
       location,
+      pid,
       (data) => {
         if (socket.bufferedAmount > TERMINAL_OUTPUT_BUFFER_MAX_BYTES)
           socket.close(WS_CLOSE_MESSAGE_TOO_BIG);

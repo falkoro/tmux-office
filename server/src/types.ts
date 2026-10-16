@@ -96,6 +96,8 @@ export interface AgentState {
 
   /** Live tmux pane from the Claude session registry. Not persisted. */
   tmux?: TmuxLocation | null;
+  /** Pid of the live Claude process that `tmux` belongs to. Not persisted. */
+  livePid?: number;
   /** `name` from the session registry. Not the teammate `agentName`. Not persisted. */
   registryName?: string | null;
 }
