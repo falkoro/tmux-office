@@ -17,7 +17,9 @@ tmux office is built on [Pixel Agents](https://github.com/pixel-agents-hq/pixel-
 | Idle              | Dozes behind a drifting `z`.                             |
 
 - A pod's sign reads **SESSION** over the tmux session name. Signs draw above every desk label, so you read the session first.
-- A desk card shows the agent name without its trailing hex id, with spaces for hyphens. The overseer's card has a star. Hover a card for the whole name.
+- A desk card shows the agent's name with spaces for hyphens. The name is the one you gave the session with `/rename`, else the tmux window's name when you set one, else Claude's name for the folder without its trailing hex id. The overseer's card has a star. Hover a card for the whole name.
+- Select a desk or focus a session, then press **Rename** in the top bar to give it another name. Your browser keeps the name. Clear it to get the tmux name back.
+- The live session list skips `claude -p` runs, so under `--live-only` they get no desk, even when they start inside a pane.
 - Click a desk to open its tmux pane in a terminal panel, where you can watch and type. Opening a desk makes the agent's pane the active pane of its window. The panel needs Cloudflare Access or `--insecure-local-terminal`. See [Expose it safely](#expose-it-safely).
 - Click a desk to select it. Its label then shows a character picker: astronaut, cat, chef, dog, frog, knight, penguin, robot, or wizard. Your browser remembers the choice per agent name. Goblins are for sub-agents only.
 - Add `#work` to the URL to focus the room `work`, or `#work-1` to focus one session. A session named like a room is `#session:<name>`.
