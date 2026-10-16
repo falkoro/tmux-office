@@ -31,8 +31,6 @@ export function clearAgentActivity(
     agent.activeSubagentToolNames.clear();
   }
 
-  agent.isWaiting = false;
-  agent.awaitingInput = false;
   agent.permissionSent = false;
   cancelPermissionTimer(agentId, permissionTimers);
   agents.broadcast({ type: 'agentToolsClear', id: agentId });
@@ -56,6 +54,13 @@ export function clearAgentActivity(
       });
     }
   }
+}
+
+/** A new turn starts: the agent is working until its next waiting status. */
+export function startTurn(agent: AgentState, agentId: number, agents: AgentStateStore): void {
+  agent.isWaiting = false;
+  agent.awaitingInput = false;
+  agent.midTurn = true;
   agents.broadcast({ type: 'agentStatus', id: agentId, status: 'active' });
 }
 

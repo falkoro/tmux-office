@@ -86,10 +86,15 @@ describe('resendAgentActivity', () => {
   });
 
   it('replays no active status after /clear follows a finished turn', () => {
-    const { replayed } = liveAndReplayedStatus((store) => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
       for (const record of [
         { type: 'user', message: { content: 'task' } },
         { type: 'system', subtype: 'turn_duration' },
+        {
+          type: 'user',
+          isMeta: true,
+          message: { content: '<local-command-caveat>Caveat</local-command-caveat>' },
+        },
         {
           type: 'user',
           message: {
@@ -100,7 +105,8 @@ describe('resendAgentActivity', () => {
         processTranscriptLine(1, JSON.stringify(record), store, new Map(), new Map());
       }
     });
-    expect(replayed).toBeUndefined();
+    expect(live).toMatchObject({ status: 'waiting' });
+    expect(replayed).toEqual(live);
   });
 
   it('replays no active status for an agent moved to its /clear transcript', () => {
@@ -110,9 +116,11 @@ describe('resendAgentActivity', () => {
       const next = path.join(dir, 'next.jsonl');
       fs.writeFileSync(next, '');
       setDismissalTracker(new DismissalTracker());
-      const { replayed } = liveAndReplayedStatus((store) => {
+      const { live, replayed } = liveAndReplayedStatus((store) => {
         const prompt = JSON.stringify({ type: 'user', message: { content: 'task' } });
         processTranscriptLine(1, prompt, store, new Map(), new Map());
+        const done = JSON.stringify({ type: 'system', subtype: 'turn_duration' });
+        processTranscriptLine(1, done, store, new Map(), new Map());
         reassignAgentToFile(
           1,
           next,
@@ -124,7 +132,8 @@ describe('resendAgentActivity', () => {
           () => {},
         );
       });
-      expect(replayed).toBeUndefined();
+      expect(live).toMatchObject({ status: 'waiting' });
+      expect(replayed).toEqual(live);
     } finally {
       for (const timer of pollingTimers.values()) clearInterval(timer);
       fs.rmSync(dir, { recursive: true, force: true });

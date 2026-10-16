@@ -569,7 +569,8 @@ export class AgentRuntime {
 
   /**
    * Drop top-level agents whose session is no longer in the registry.
-   * Children stay while their lead stays, and leave with the lead.
+   * Children stay while their lead stays, and leave with the lead. A child
+   * whose lead is gone is judged by its own session.
    * The transcript is not dismissed: a new pid with the same session id
    * must be adopted on a later tick.
    */
@@ -578,7 +579,7 @@ export class AgentRuntime {
     const live = new Set(registry.sessions().map((session) => session.sessionId));
     const departing: number[] = [];
     for (const [id, agent] of this.store) {
-      if (agent.leadAgentId !== undefined) continue;
+      if (agent.leadAgentId !== undefined && this.store.has(agent.leadAgentId)) continue;
       if (live.has(agent.sessionId)) continue;
       departing.push(id);
     }

@@ -127,7 +127,7 @@ If only one of them is set, the server refuses to start and names the missing on
 - A terminal panel per desk, and the Access gate in front of it.
 - The `/api/office` feed.
 
-The npm package and the CLI keep the name `pixel-agents`.
+Nothing is published to npm; the project runs from source via `node dist/cli.js`. `package.json` keeps the upstream name `pixel-agents`.
 
 ## Develop
 

@@ -4,13 +4,9 @@ import {
 } from '../../../core/src/constants.js';
 import type { MessageTransport } from './types.js';
 
-/**
- * Each time the transport is connected again after a drop, asks the server
- * for a fresh snapshot and calls `handler`.
- */
+/** Each time the transport is connected again after a drop, asks the server for a fresh snapshot. */
 export function onReconnect(
   transport: Pick<MessageTransport, 'onStateChange' | 'send' | 'state'>,
-  handler: () => void,
 ): () => void {
   let connected = transport.state === TRANSPORT_STATE_CONNECTED;
   let dropped = false;
@@ -21,7 +17,6 @@ export function onReconnect(
       if (!dropped) return;
       dropped = false;
       transport.send({ type: 'webviewReady' });
-      handler();
     }
   });
 }

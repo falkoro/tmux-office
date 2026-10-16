@@ -106,6 +106,8 @@ export function handleClientMessage(
       const agent = store.get(id);
       if (agent && runtime) {
         runtime.dismissalTracker.close(agent.jsonlFile);
+        runtime.removeTeammates(id);
+        runtime.subagentWatch.removeByLead(id);
         runtime.removeAgent(id);
       }
       break;

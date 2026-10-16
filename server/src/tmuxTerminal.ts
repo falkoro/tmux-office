@@ -37,6 +37,22 @@ export function tmuxSocketName(): string | undefined {
   return undefined;
 }
 
+/**
+ * The env for every tmux call. Without a socket name the default server is
+ * meant, not the one this process may run inside, which TMUX would select.
+ */
+export function tmuxEnv(): NodeJS.ProcessEnv {
+  if (tmuxSocketName()) return process.env;
+  const env = { ...process.env };
+  delete env.TMUX;
+  delete env.TMUX_PANE;
+  return env;
+}
+
+function runTmux(args: string[], timeout: number): Promise<{ stdout: string }> {
+  return execFileAsync('tmux', args, { timeout, env: tmuxEnv() });
+}
+
 /** `-L <name>` when PIXEL_AGENTS_TMUX_SOCKET is set, otherwise nothing. */
 export function tmuxSocketArgs(): string[] {
   const name = tmuxSocketName();
@@ -102,7 +118,7 @@ async function readStatusLines(paneId: string): Promise<number> {
   ];
   for (const args of queries) {
     try {
-      const { stdout } = await execFileAsync('tmux', args, { timeout: 2000 });
+      const { stdout } = await runTmux(args, 2000);
       const count = statusLineCount(stdout);
       if (count !== null) return count;
     } catch {
@@ -127,8 +143,7 @@ export async function readPaneClientSize(
 ): Promise<{ cols: number; rows: number } | null> {
   if (!PANE_ID.test(paneId)) return null;
   try {
-    const { stdout } = await execFileAsync(
-      'tmux',
+    const { stdout } = await runTmux(
       [
         ...tmuxSocketArgs(),
         'display-message',
@@ -137,7 +152,7 @@ export async function readPaneClientSize(
         paneId,
         '#{window_width} #{window_height}',
       ],
-      { timeout: 2000 },
+      2000,
     );
     const [widthRaw, heightRaw] = stdout.trim().split(/\s+/);
     const width = Number(widthRaw);
@@ -195,9 +210,7 @@ export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
  */
 export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
   try {
-    const { stdout } = await execFileAsync('tmux', listTmuxPanesArgv(), {
-      timeout: TMUX_LIST_PANES_TIMEOUT_MS,
-    });
+    const { stdout } = await runTmux(listTmuxPanesArgv(), TMUX_LIST_PANES_TIMEOUT_MS);
     return parseTmuxPaneList(stdout);
   } catch {
     return null;
@@ -207,9 +220,7 @@ export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
 export async function killThrowawaySession(sessionName: string): Promise<void> {
   if (!THROWAWAY_SESSION.test(sessionName)) return;
   try {
-    await execFileAsync('tmux', [...tmuxSocketArgs(), 'kill-session', '-t', sessionName], {
-      timeout: 2000,
-    });
+    await runTmux([...tmuxSocketArgs(), 'kill-session', '-t', sessionName], 2000);
   } catch {
     /* destroy-unattached already removed it */
   }
@@ -228,7 +239,7 @@ interface NodePty {
   spawn(
     file: string,
     args: string[],
-    options: { name: string; cols: number; rows: number; cwd: string },
+    options: { name: string; cols: number; rows: number; cwd: string; env: NodeJS.ProcessEnv },
   ): Pty;
 }
 
@@ -261,6 +272,7 @@ export async function attachTmuxPane(
     cols: size.cols,
     rows: size.rows,
     cwd: process.env.HOME || '/tmp',
+    env: tmuxEnv(),
   });
   term.onData(onData);
   onSize(size.cols, size.rows);

@@ -10,6 +10,7 @@ import {
   cancelWaitingTimer,
   clearAgentActivity,
   startPermissionTimer,
+  startTurn,
   startWaitingTimer,
 } from './timerManager.js';
 import type { AgentState } from './types.js';
@@ -401,14 +402,15 @@ export function processTranscriptLine(
           // New user text prompt — new turn starting
           cancelWaitingTimer(agentId, waitingTimers);
           clearAgentActivity(agent, agentId, agents, permissionTimers);
-          agent.midTurn = true;
+          startTurn(agent, agentId, agents);
           agent.hadToolsInTurn = false;
         }
-      } else if (typeof content === 'string' && content.trim()) {
+      } else if (typeof content === 'string' && content.trim() && !record.isMeta) {
         // New user text prompt — new turn starting
         cancelWaitingTimer(agentId, waitingTimers);
         clearAgentActivity(agent, agentId, agents, permissionTimers);
-        agent.midTurn = !content.includes('/clear</command-name>');
+        if (content.includes('/clear</command-name>')) agent.midTurn = false;
+        else startTurn(agent, agentId, agents);
         agent.hadToolsInTurn = false;
       }
     } else if (record.type === 'queue-operation' && record.operation === 'enqueue') {

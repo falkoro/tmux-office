@@ -784,7 +784,8 @@ export class OfficeScene {
   /** Skip OrbitControls until a walk exit glide finishes. Its polar clamp cannot look level. */
   private holdOrbit = false;
   private readonly keys = new Set<string>();
-  private readonly pointers = new Set<number>();
+  /** Pointers that are down, by id, with their pointerType. */
+  private readonly pointers = new Map<number, string>();
   private walkX = 0;
   private walkZ = 0;
   private yaw = 0;
@@ -1040,6 +1041,15 @@ export class OfficeScene {
       this.walkZ + dir.z * look,
     );
     orbit.setFromVector3(this.walkOffset.set(-dir.x * look, -dir.y * look, -dir.z * look));
+  }
+
+  /** Back onto the floor after the plan shrank under the viewer. */
+  private clampWalk(): void {
+    const at = stepWalk({ x: this.walkX, z: this.walkZ }, 0, NO_WALK_KEYS, 0, this.floorBounds());
+    if (at.x === this.walkX && at.z === this.walkZ) return;
+    this.walkX = at.x;
+    this.walkZ = at.z;
+    this.placeWalkCamera();
   }
 
   private placeWalkCamera(): void {
@@ -1331,14 +1341,7 @@ export class OfficeScene {
       );
     }
 
-    if (this.walking && !this.tween) {
-      const at = stepWalk({ x: this.walkX, z: this.walkZ }, 0, NO_WALK_KEYS, 0, this.floorBounds());
-      if (at.x !== this.walkX || at.z !== this.walkZ) {
-        this.walkX = at.x;
-        this.walkZ = at.z;
-        this.placeWalkCamera();
-      }
-    }
+    if (this.walking && !this.tween) this.clampWalk();
 
     const key = fitKey(this.plan, this.link.focus);
     if (!this.userMoved && !this.walking && key !== null && key !== this.fitKey) {
@@ -1394,7 +1397,10 @@ export class OfficeScene {
       a.theta + dTheta * e,
     );
     this.setView(this.tweenTarget, this.tweenOrbit);
-    if (k >= 1) this.tween = null;
+    if (k >= 1) {
+      this.tween = null;
+      if (this.walking) this.clampWalk();
+    }
     return true;
   }
 
@@ -1541,11 +1547,11 @@ export class OfficeScene {
   // A click must not count as steering, or the first pick would freeze the fit.
   private readonly onPointerDown = (e: PointerEvent): void => {
     if (e.isPrimary) {
-      this.pointers.clear();
-      this.down = null;
+      if (this.down && this.pointers.get(this.down.id) === e.pointerType) this.down = null;
+      for (const [id, type] of this.pointers) if (type === e.pointerType) this.pointers.delete(id);
     }
-    const others = [...this.pointers].some((id) => id !== e.pointerId);
-    this.pointers.add(e.pointerId);
+    const others = [...this.pointers.keys()].some((id) => id !== e.pointerId);
+    this.pointers.set(e.pointerId, e.pointerType);
     if (this.walking && this.down && this.renderer.domElement.hasPointerCapture(this.down.id)) {
       this.down.dragged = true;
       return;

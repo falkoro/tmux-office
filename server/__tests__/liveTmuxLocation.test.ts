@@ -176,6 +176,45 @@ describe('tmux pane list', () => {
     }
   });
 
+  it.skipIf(!hasTmux)(
+    'reads the default server, not the tmux server it runs inside, without a socket name',
+    async () => {
+      const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-tmux-env-'));
+      const socket = path.join(dir, 'inside');
+      const emptyTmpdir = path.join(dir, 'default');
+      fs.mkdirSync(emptyTmpdir);
+      const saved = {
+        socket: process.env.PIXEL_AGENTS_TMUX_SOCKET,
+        tmux: process.env.TMUX,
+        tmpdir: process.env.TMUX_TMPDIR,
+      };
+      const restore = (key: string, value: string | undefined) => {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      };
+      try {
+        await execFileAsync(
+          'tmux',
+          ['-f', '/dev/null', '-S', socket, 'new-session', '-d', '-s', 'inside'],
+          { timeout: 4000 },
+        );
+        delete process.env.PIXEL_AGENTS_TMUX_SOCKET;
+        process.env.TMUX = `${socket},1,0`;
+        process.env.TMUX_TMPDIR = emptyTmpdir;
+
+        await expect(listTmuxPanes()).resolves.toBeNull();
+      } finally {
+        restore('PIXEL_AGENTS_TMUX_SOCKET', saved.socket);
+        restore('TMUX', saved.tmux);
+        restore('TMUX_TMPDIR', saved.tmpdir);
+        await execFileAsync('tmux', ['-S', socket, 'kill-server'], { timeout: 4000 }).catch(
+          () => undefined,
+        );
+        fs.rmSync(dir, { recursive: true, force: true });
+      }
+    },
+  );
+
   it.skipIf(!hasTmux)('reads panes from a private tmux socket', async () => {
     const socketName = `pa-test-panes-${process.pid}-${Date.now()}`;
     const previous = process.env.PIXEL_AGENTS_TMUX_SOCKET;

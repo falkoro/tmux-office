@@ -106,6 +106,7 @@ function App() {
     showAreas,
     setShowAreas,
     agentTerminals,
+    snapshots,
     officeRooms,
   } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty);
 
@@ -120,9 +121,8 @@ function App() {
   const [isHooksInfoOpen, setIsHooksInfoOpen] = useState(false);
   const [hooksTooltipDismissed, setHooksTooltipDismissed] = useState(false);
   const [isDebugMode, setIsDebugMode] = useState(false);
-  const [reconnects, setReconnects] = useState(0);
   const [office3DFailed, setOffice3DFailed] = useState(false);
-  useEffect(() => onReconnect(transport, () => setReconnects((n) => n + 1)), []);
+  useEffect(() => onReconnect(transport), []);
   const [alwaysShowOverlay, setAlwaysShowOverlay] = useState(false);
 
   const currentMajorMinor = toMajorMinor(extensionVersion);
@@ -671,7 +671,7 @@ function App() {
           agentId={openTerminalId}
           name={openTerminal.name}
           tmux={openTerminal.tmux}
-          reconnects={reconnects}
+          reconnects={snapshots}
           onClose={() => {
             setOpenTerminalId(null);
             const os = getOfficeState();

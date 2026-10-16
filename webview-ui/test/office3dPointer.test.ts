@@ -284,6 +284,87 @@ describe('OfficeScene pointer gestures', () => {
     expect(inner.walkX).toBeLessThanOrEqual(inner.plan.width / 2);
   });
 
+  test('a walk entry glide that ends after the office shrank lands on the floor', async () => {
+    reducedMotion = false;
+    try {
+      const { OfficeScene } = await import('../src/office3d/scene.js');
+      const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+        onPick: () => undefined,
+        onFocus: () => undefined,
+        onWalk: () => undefined,
+      });
+      const inner = scene as unknown as {
+        plan: unknown;
+        tween: unknown;
+        walkZ: number;
+        layout: () => void;
+        stepTween: (now: number) => boolean;
+      };
+      inner.plan = {
+        rooms: [],
+        columns: 1,
+        narrow: false,
+        width: 10,
+        depth: 40,
+      };
+      scene.toggleWalk();
+      expect(inner.tween).not.toBeNull();
+
+      inner.layout();
+      const floor = inner.plan as { depth: number };
+      expect(floor.depth).toBeLessThan(40);
+      inner.stepTween(Number.MAX_SAFE_INTEGER);
+
+      expect(inner.tween).toBeNull();
+      expect(inner.walkZ).toBeLessThanOrEqual(floor.depth / 2 + OFFICE3D_WALK_PORCH);
+    } finally {
+      reducedMotion = true;
+    }
+  });
+
+  test('a finger tapping during a mouse look in walk mode neither ends the look nor picks', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    vi.spyOn(OfficeScene.prototype as unknown as { pick: () => number }, 'pick').mockReturnValue(7);
+    const picks: number[] = [];
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: (id) => picks.push(id),
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const canvas = (
+      scene as unknown as { renderer: { domElement: ReturnType<typeof fakeElement> } }
+    ).renderer.domElement;
+    const captured = new Set<number>();
+    Object.assign(canvas, {
+      setPointerCapture: (id: number) => captured.add(id),
+      hasPointerCapture: (id: number) => captured.has(id),
+      releasePointerCapture: (id: number) => captured.delete(id),
+    });
+    const fire = (type: string, pointerId: number, pointerType: string, x = 300) =>
+      canvas.handlers.get(type)!({
+        pointerId,
+        pointerType,
+        isPrimary: true,
+        clientX: x,
+        clientY: 300,
+        button: 0,
+        buttons: 1,
+      });
+    scene.toggleWalk();
+
+    fire('pointerdown', 1, 'mouse');
+    fire('pointerdown', 2, 'touch');
+    fire('pointerup', 2, 'touch');
+    expect(picks).toEqual([]);
+
+    const inner = scene as unknown as { yaw: number };
+    const yaw = inner.yaw;
+    fire('pointermove', 1, 'mouse', 400);
+    expect(inner.yaw).not.toBe(yaw);
+    fire('pointerup', 1, 'mouse', 400);
+    expect(picks).toEqual([]);
+  });
+
   test('a light probe bake that fails after the scene is gone logs nothing', async () => {
     const { OfficeScene } = await import('../src/office3d/scene.js');
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);

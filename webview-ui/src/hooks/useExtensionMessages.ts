@@ -122,6 +122,8 @@ interface ExtensionMessageState {
    *  pending install from a failed one, per provider — A's status is never a verdict on B's install. */
   hooksStatusSeq: Record<string, number>;
   hooksInfoShown: boolean;
+  /** existingAgents snapshots from the server this page belongs to; each one reopens the terminal socket. */
+  snapshots: number;
   /** Live tmux metadata keyed by agent id. A null tmux closes the terminal panel. */
   agentTerminals: Record<number, AgentTerminalMeta>;
   /** Configured office rooms; null when the server has none. */
@@ -156,6 +158,7 @@ export function useExtensionMessages(
   >({});
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([]);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [snapshots, setSnapshots] = useState(0);
   const [layoutWasReset, setLayoutWasReset] = useState(false);
   const [loadedAssets, setLoadedAssets] = useState<
     { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined
@@ -399,6 +402,7 @@ export function useExtensionMessages(
           window.location.reload();
           return;
         }
+        setSnapshots((n) => n + 1);
         const incoming = msg.agents as number[];
         const meta = (msg.agentMeta || {}) as Record<number, ExistingAgentMeta>;
         const folderNames = (msg.folderNames || {}) as Record<number, string>;
@@ -878,6 +882,7 @@ export function useExtensionMessages(
     hooksStatusSeq,
     setHooksEnabled,
     hooksInfoShown,
+    snapshots,
     agentTerminals,
     officeRooms,
     consentRequest,

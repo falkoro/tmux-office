@@ -28,22 +28,23 @@ function fakeTransport(
 }
 
 describe('onReconnect', () => {
-  it('fires once per return after a drop, not on the first connect', () => {
-    let fired = 0;
-    const { transport, emit } = fakeTransport();
-    onReconnect(transport, () => (fired += 1));
+  it('asks once per return after a drop', () => {
+    const sent: string[] = [];
+    const { transport, emit } = fakeTransport((msg) => sent.push(msg.type));
+    onReconnect(transport);
     emit(TRANSPORT_STATE_CONNECTING);
     emit(TRANSPORT_STATE_CONNECTED);
-    expect(fired).toBe(0);
     emit(TRANSPORT_STATE_RECONNECTING);
     emit(TRANSPORT_STATE_CONNECTED);
-    expect(fired).toBe(1);
+    emit(TRANSPORT_STATE_RECONNECTING);
+    emit(TRANSPORT_STATE_CONNECTED);
+    expect(sent).toEqual(['webviewReady', 'webviewReady']);
   });
 
   it('asks for a fresh snapshot after a drop, not on the first connect', () => {
     const sent: string[] = [];
     const { transport, emit } = fakeTransport((msg) => sent.push(msg.type));
-    onReconnect(transport, () => undefined);
+    onReconnect(transport);
     emit(TRANSPORT_STATE_CONNECTING);
     emit(TRANSPORT_STATE_CONNECTED);
     expect(sent).toEqual([]);
@@ -54,27 +55,23 @@ describe('onReconnect', () => {
 
   it('treats a first connect that failed and then succeeded as the first connect', () => {
     const sent: string[] = [];
-    let fired = 0;
     const { transport, emit } = fakeTransport((msg) => sent.push(msg.type));
-    onReconnect(transport, () => (fired += 1));
+    onReconnect(transport);
     emit(TRANSPORT_STATE_CONNECTING);
     emit(TRANSPORT_STATE_RECONNECTING);
     emit(TRANSPORT_STATE_CONNECTED);
     expect(sent).toEqual([]);
-    expect(fired).toBe(0);
   });
 
   it('detects the first drop when it subscribes after the transport connected', () => {
     const sent: string[] = [];
-    let fired = 0;
     const { transport, emit } = fakeTransport(
       (msg) => sent.push(msg.type),
       TRANSPORT_STATE_CONNECTED,
     );
-    onReconnect(transport, () => (fired += 1));
+    onReconnect(transport);
     emit(TRANSPORT_STATE_RECONNECTING);
     emit(TRANSPORT_STATE_CONNECTED);
     expect(sent).toEqual(['webviewReady']);
-    expect(fired).toBe(1);
   });
 });

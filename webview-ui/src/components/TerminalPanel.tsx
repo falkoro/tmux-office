@@ -23,7 +23,7 @@ export interface TerminalPanelProps {
   agentId: number;
   name: string | null;
   tmux: TerminalPanelLocation;
-  /** Main transport reconnects so far; each one reopens the terminal socket. */
+  /** Server snapshots so far; each one reopens the terminal socket. */
   reconnects: number;
   onClose: () => void;
 }

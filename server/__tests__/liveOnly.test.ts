@@ -354,6 +354,64 @@ describe('live-only', () => {
     expect(planted.store.size).toBe(0);
   });
 
+  it('closing a lead also removes its teammate and its watched sub-agent', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    const lead = [...planted.store.values()][0]!;
+    const teammateFile = path.join(planted.projectDir, 'researcher.jsonl');
+    fs.writeFileSync(teammateFile, '');
+    planted.store.set(
+      40,
+      bareAgent({
+        id: 40,
+        sessionId: lead.sessionId,
+        projectDir: planted.projectDir,
+        jsonlFile: teammateFile,
+        leadAgentId: lead.id,
+        agentName: 'researcher',
+        spawnToolUseId: 'toolu_team',
+      }),
+    );
+    const subFile = path.join(planted.projectDir, 'sub.jsonl');
+    fs.writeFileSync(subFile, '');
+    planted.runtime.subagentWatch.watch(lead, lead.id, {
+      jsonlPath: subFile,
+      toolUseId: 'toolu_sub',
+    });
+
+    handleClientMessage({ type: 'closeAgent', id: lead.id }, () => undefined, {
+      store: planted.store,
+      runtime: planted.runtime,
+      cache: null,
+    });
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect(planted.store.size).toBe(0);
+    expect(planted.runtime.subagentWatch.isWatching(subFile)).toBe(false);
+  });
+
+  it('removes a teammate whose lead is gone once its own session leaves', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    const orphanFile = path.join(planted.projectDir, 'orphan.jsonl');
+    fs.writeFileSync(orphanFile, '');
+    planted.store.set(
+      40,
+      bareAgent({
+        id: 40,
+        sessionId: 'gone',
+        projectDir: planted.projectDir,
+        jsonlFile: orphanFile,
+        leadAgentId: 999,
+      }),
+    );
+
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect(planted.store.has(40)).toBe(false);
+    expect(planted.store.size).toBe(1);
+  });
+
   it('leaves the agent in place when live-only is off and the session file disappears', async () => {
     vi.useFakeTimers();
     const planted = plant(false, true);
