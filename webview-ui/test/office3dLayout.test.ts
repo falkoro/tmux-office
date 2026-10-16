@@ -3,13 +3,15 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 
 import {
+  OFFICE3D_COMPACT_LABEL_PX,
   OFFICE3D_CREW_SCALE,
   OFFICE3D_DEPTH_FORESHORTEN,
+  OFFICE3D_FULL_LABEL_PX,
   OFFICE3D_ROOM_PAD_FRONT,
   OFFICE3D_ROSTER_LINE_DEPTH,
 } from '../src/constants.js';
 import type { OfficePlan, RoomSpot } from '../src/office3d/layout.js';
-import { fitKey, planOffice, porchRosterColumns } from '../src/office3d/layout.js';
+import { fitKey, labelDensity, planOffice, porchRosterColumns } from '../src/office3d/layout.js';
 import type { DeskModel, PodModel, RoomModel } from '../src/office3d/model.js';
 import { BACKGROUND_ROOM_ID, NO_PANE_POD_ID } from '../src/office3d/model.js';
 
@@ -353,5 +355,20 @@ describe('fitKey', () => {
     const gone = planOffice([room('s', pod('s-5', 1))], DESKTOP);
     assert.equal(fitKey(gone, focus), null);
     assert.notEqual(fitKey(gone, null), null);
+  });
+});
+
+describe('labelDensity', () => {
+  test('a zoomed-out pitch shows the name list only where the plan reserved its floor', () => {
+    const far = OFFICE3D_COMPACT_LABEL_PX - 1;
+    assert.equal(labelDensity(far, true), 'roster');
+    assert.equal(labelDensity(far, false), 'compact');
+  });
+
+  test('closer pitches keep desk labels whether or not floor is reserved', () => {
+    for (const floor of [true, false]) {
+      assert.equal(labelDensity(OFFICE3D_COMPACT_LABEL_PX, floor), 'compact');
+      assert.equal(labelDensity(OFFICE3D_FULL_LABEL_PX, floor), 'full');
+    }
   });
 });

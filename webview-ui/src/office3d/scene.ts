@@ -104,7 +104,7 @@ import { Effects } from './effects.js';
 import type { OfficeFurniture } from './furniture.js';
 import { buildOffice, radialTexture } from './furniture.js';
 import type { Bounds, DeskSpot, OfficePlan, RoomSpot } from './layout.js';
-import { fitKey, focusArea, planOffice, porchRosterColumns } from './layout.js';
+import { fitKey, focusArea, labelDensity, planOffice, porchRosterColumns } from './layout.js';
 import type { DeskModel, DeskStatus, Focus, HelperModel, PodModel, RoomModel } from './model.js';
 import {
   BACKGROUND_ROOM_ID,
@@ -759,6 +759,7 @@ export class OfficeScene {
   private snapshot: OfficeSnapshot = { rooms: [], selectedId: null };
   private plan: OfficePlan = planOffice([], 1);
   private planKey = '';
+  private rosterFloor = false;
   private fitKey: string | null = '';
   private readonly link = new FocusLink(readHash());
   private userMoved = false;
@@ -1274,14 +1275,8 @@ export class OfficeScene {
     const pitch = ppm * OFFICE3D_DESK_PITCH_X;
     // holdOrbit covers the glide back up: the camera is still low after walking turns off.
     const eyeLevel = this.walking || this.holdOrbit;
-    // The roster is a floor list for the overhead view. At eye height it covers the room, so names stay on the desks.
-    let density =
-      pitch >= OFFICE3D_FULL_LABEL_PX
-        ? 'full'
-        : pitch >= OFFICE3D_COMPACT_LABEL_PX
-          ? 'compact'
-          : 'roster';
-    if (eyeLevel && density === 'roster') density = 'compact';
+    // The roster is a floor list for the overhead view, shown only on floor the plan reserved. At eye height it covers the room, so names stay on the desks.
+    const density = labelDensity(pitch, !eyeLevel && (this.plan.narrow || this.rosterFloor));
     // Plaques use one pixels-per-metre. Eye height would size them as if every sign were a few metres away.
     const labelPpm = eyeLevel ? Math.min(ppm, OFFICE3D_FULL_LABEL_PX / OFFICE3D_DESK_PITCH_X) : ppm;
     const key = `${labelPpm.toFixed(1)}|${density}|${eyeLevel ? 1 : 0}`;
@@ -1306,9 +1301,8 @@ export class OfficeScene {
     this.plan = planOffice(this.snapshot.rooms, this.camera.aspect);
     // Reserve floor for the room lists when the overview is far enough out to show them.
     const overview = this.fitView(focusArea(this.plan, null)).orbit.radius;
-    if (this.ppmAt(overview) * OFFICE3D_DESK_PITCH_X < OFFICE3D_COMPACT_LABEL_PX) {
-      this.plan = planOffice(this.snapshot.rooms, this.camera.aspect, true);
-    }
+    this.rosterFloor = this.ppmAt(overview) * OFFICE3D_DESK_PITCH_X < OFFICE3D_COMPACT_LABEL_PX;
+    if (this.rosterFloor) this.plan = planOffice(this.snapshot.rooms, this.camera.aspect, true);
     this.labels.domElement.dataset.narrow = String(this.plan.narrow);
     for (const spot of this.plan.rooms) {
       this.rooms.get(spot.id)?.place(spot);
