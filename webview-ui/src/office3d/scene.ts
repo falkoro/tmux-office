@@ -361,11 +361,17 @@ export class DeskView {
       }
       this.pickEl.value = this.kind;
     };
-    this.pickEl.addEventListener('pointerdown', fill);
+    let pointerOpened = false;
+    this.pickEl.addEventListener('pointerdown', () => {
+      pointerOpened = true;
+      fill();
+    });
     this.pickEl.addEventListener('focus', fill);
     this.pickEl.addEventListener('change', () => {
       const kind = this.pickEl.value;
       if (isCharacterKind(kind)) ctx.choose(this.name, kind);
+      if (!pointerOpened) return;
+      pointerOpened = false;
       this.pickEl.blur();
     });
     this.card = new CSS2DObject(this.el);
