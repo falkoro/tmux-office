@@ -9,9 +9,9 @@ import { AgentStateStore } from '../src/agentStateStore.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
 import {
   ClaudeSessionRegistry,
-  type ProcReader,
   parseSessionFile,
   parseTmuxLocation,
+  type ProcReader,
   transcriptPathForSession,
 } from '../src/providers/hook/claude/claudeSessionRegistry.js';
 

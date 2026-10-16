@@ -162,7 +162,20 @@ describe('tmux pane list', () => {
     try {
       await execFileAsync(
         'tmux',
-        ['-L', socketName, 'new-session', '-d', '-s', 'work-5', '-x', '80', '-y', '24'],
+        [
+          '-f',
+          '/dev/null',
+          '-L',
+          socketName,
+          'new-session',
+          '-d',
+          '-s',
+          'work-5',
+          '-x',
+          '80',
+          '-y',
+          '24',
+        ],
         { timeout: 4000 },
       );
       const identity = (

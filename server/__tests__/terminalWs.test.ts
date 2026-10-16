@@ -41,7 +41,9 @@ function bareAgent(sessionId: string): AgentState {
 }
 
 async function tmux(socketName: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('tmux', ['-L', socketName, ...args], { timeout: 4000 });
+  const { stdout } = await execFileAsync('tmux', ['-f', '/dev/null', '-L', socketName, ...args], {
+    timeout: 4000,
+  });
   return stdout;
 }
 

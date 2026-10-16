@@ -104,7 +104,7 @@ start_rig() {
       if tmux -L "$sock" has-session -t "=$session" 2>/dev/null; then
         tmux -L "$sock" new-window -d -t "=$session:" -n "$window" -c "$cwd" "$run"
       else
-        tmux -L "$sock" new-session -d -s "$session" -n "$window" -x "$cols" -y "$rows" -c "$cwd" "$run"
+        tmux -f /dev/null -L "$sock" new-session -d -s "$session" -n "$window" -x "$cols" -y "$rows" -c "$cwd" "$run"
       fi
       read -r loc pid <<< "$(tmux -L "$sock" display-message -p -t "=$session:$window" '#{session_name}:#{window_id}.#{pane_id} #{pane_pid}')"
       [[ -n "$pid" ]] || { echo "could not read the pane of $session:$window" >&2; stop_rig; exit 1; }
