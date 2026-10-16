@@ -382,6 +382,10 @@
 .o3d-labels[data-narrow='false'] .o3d-roster-item {
   max-inline-size: 11em;
 }
+/* Zoomed out past an overview that shows desk labels, the plan holds no floor for the list. */
+.o3d-labels[data-roster-floor='false'][data-density='roster'] .o3d-roster {
+  display: none;
+}
 
 .o3d-roster-item {
   --o3d-status: var(--o3d-idle);

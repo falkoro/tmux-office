@@ -1,13 +1,11 @@
 import {
   OFFICE3D_BACKGROUND_ROSTER_NAME_W,
   OFFICE3D_BACKGROUND_SCALE,
-  OFFICE3D_COMPACT_LABEL_PX,
   OFFICE3D_CREW_PER_ROW,
   OFFICE3D_CREW_SCALE,
   OFFICE3D_DEPTH_FORESHORTEN,
   OFFICE3D_DESK_PITCH_X,
   OFFICE3D_DESK_PITCH_Z,
-  OFFICE3D_FULL_LABEL_PX,
   OFFICE3D_NARROW_ASPECT,
   OFFICE3D_NARROW_ROSTER_COLUMNS,
   OFFICE3D_POD_FOCUS_PAD,
@@ -215,15 +213,6 @@ const EMPTY_INNER_D = OFFICE3D_DESK_PITCH_Z * 0.6;
 /** Names per line of a room's name list on a wide viewport; office3d.css lays it out in as many columns. */
 export function porchRosterColumns(width: number): number {
   return Math.max(1, Math.floor(width / OFFICE3D_BACKGROUND_ROSTER_NAME_W));
-}
-
-/**
- * Label density for a desk pitch of `pitchPx` screen pixels. The name list only
- * shows when `rosterFloor` says the plan holds floor for it in front of the pods.
- */
-export function labelDensity(pitchPx: number, rosterFloor: boolean): 'full' | 'compact' | 'roster' {
-  if (pitchPx >= OFFICE3D_FULL_LABEL_PX) return 'full';
-  return pitchPx >= OFFICE3D_COMPACT_LABEL_PX || !rosterFloor ? 'compact' : 'roster';
 }
 
 /**
