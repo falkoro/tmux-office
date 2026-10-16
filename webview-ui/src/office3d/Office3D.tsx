@@ -9,7 +9,7 @@ import type { AgentTerminalMeta } from '../hooks/useExtensionMessages.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import type { ToolActivity } from '../office/types.js';
 import { isBrowserRuntime } from '../runtime.js';
-import { aliasKey, applyAliases, saveAlias } from './characterChoice.js';
+import { aliasKey, applyAliases, loadAlias, saveAlias } from './characterChoice.js';
 import type { Focus, RoomModel } from './model.js';
 import { BACKGROUND_ROOM_ID, deriveOffice, roomHeat } from './model.js';
 import { OfficeScene } from './scene.js';
@@ -116,13 +116,14 @@ export default function Office3D(props: Office3DProps) {
     .find((d) => d.agentId === props.officeState.selectedAgentId);
   const focusedPod = focused?.kind === 'pod' ? allPods.find((p) => p.id === focused.id) : undefined;
   // VS Code webviews block window.prompt.
-  const renaming = !isBrowserRuntime
+  const target = !isBrowserRuntime
     ? null
     : selectedDesk
-      ? { key: aliasKey('desk', selectedDesk.name), name: selectedDesk.label }
+      ? { key: aliasKey('desk', selectedDesk.name), name: selectedDesk.name }
       : focusedPod
         ? { key: aliasKey('pod', focusedPod.id), name: focusedPod.title }
         : null;
+  const renaming = target && { key: target.key, name: loadAlias(target.key) ?? target.name };
   return (
     <div className="o3d-root" style={STATUS_VARS}>
       <div ref={hostRef} className="o3d-host" />
@@ -173,7 +174,8 @@ export default function Office3D(props: Office3DProps) {
                   `Rename ${renaming.name}. Leave it empty to restore the tmux name.`,
                   renaming.name,
                 );
-                if (name !== null) saveAlias(renaming.key, name.trim());
+                if (name !== null && name.trim() !== renaming.name)
+                  saveAlias(renaming.key, name.trim());
               }}
             >
               Rename

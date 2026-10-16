@@ -1207,12 +1207,14 @@ export class OfficeScene {
     }
     this.countFrame(now);
 
+    if (this.raf) return;
     if (tweening || moved || (this.walking && this.moving())) {
       this.raf = requestAnimationFrame(this.frame);
       return;
     }
     this.walkAt = 0;
     this.lastFrame = 0;
+    clearTimeout(this.timer);
     if (busy) {
       // Agents at work never stop moving; drawing them at the monitor's full refresh rate kept the GPU loaded (and whining) nonstop.
       this.timer = window.setTimeout(this.wake, OFFICE3D_AMBIENT_FRAME_MS);

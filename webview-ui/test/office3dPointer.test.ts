@@ -11,6 +11,7 @@ vi.mock('three', async (importOriginal) => {
     shadowMap = {};
     setPixelRatio(): void {}
     setSize(): void {}
+    render(): void {}
     dispose(): void {}
     forceContextLoss(): void {}
   }
@@ -597,5 +598,46 @@ describe('OfficeScene pointer gestures', () => {
 
     inner.onKeyDown({ code: 'Escape', target: null, preventDefault: () => undefined });
     expect(inner.walking).toBe(false);
+  });
+
+  test('a camera change during a frame leaves one frame queued, not two', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: () => undefined,
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const inner = scene as unknown as {
+      controls: { update: () => boolean };
+      labels: { render: () => void };
+      requestRender: () => void;
+    };
+    const queued: FrameRequestCallback[] = [];
+    let mostQueued = 0;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      queued.push(cb);
+      mostQueued = Math.max(mostQueued, queued.length);
+      return queued.length;
+    });
+    vi.spyOn(inner.labels, 'render').mockImplementation(() => undefined);
+    // OrbitControls dispatches 'change' from update() whenever the camera moved.
+    let moves = 5;
+    inner.controls.update = () => {
+      if (moves-- <= 0) return false;
+      inner.requestRender();
+      return true;
+    };
+    const doc = document as unknown as { hidden: boolean };
+    doc.hidden = false;
+    try {
+      inner.requestRender();
+      for (let now = 16; queued.length > 0 && now < 1000; now += 16) queued.shift()!(now);
+
+      expect(mostQueued).toBe(1);
+      expect(queued).toEqual([]);
+    } finally {
+      doc.hidden = true;
+      scene.dispose();
+    }
   });
 });

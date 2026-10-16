@@ -50,19 +50,22 @@ export function saveAlias(key: string, name: string, store = browserStore()): vo
   }
 }
 
+/** The name this viewer gave, or null. */
+export function loadAlias(key: string, store = browserStore()): string | null {
+  try {
+    return store?.getItem(key) || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Show this viewer's names on desk cards and session signs. Keys stay the real names. */
 export function applyAliases(rooms: RoomModel[], store = browserStore()): void {
-  const read = (key: string): string | null => {
-    try {
-      return store?.getItem(key) || null;
-    } catch {
-      return null;
-    }
-  };
   for (const room of rooms) {
     for (const pod of room.pods) {
-      pod.title = read(aliasKey('pod', pod.id)) ?? pod.title;
-      for (const desk of pod.desks) desk.label = read(aliasKey('desk', desk.name)) ?? desk.label;
+      pod.title = loadAlias(aliasKey('pod', pod.id), store) ?? pod.title;
+      for (const desk of pod.desks)
+        desk.label = loadAlias(aliasKey('desk', desk.name), store) ?? desk.label;
     }
   }
 }
