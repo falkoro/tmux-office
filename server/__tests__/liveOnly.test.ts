@@ -583,6 +583,62 @@ describe('live-only', () => {
     expect(planted.store.get(agent.id)?.jsonlFile).toBe(planted.jsonl);
   });
 
+  it('keeps the agent through /clear and a resume back before the new transcript exists', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    planted.runtime.hooksEnabled.current = false;
+    const agent = [...planted.store.values()][0]!;
+    const offsetBefore = agent.fileOffset;
+    const lifecycle: string[] = [];
+    planted.store.on('agentAdded', (id) => lifecycle.push(`added ${id}`));
+    planted.store.on('agentRemoved', (id) => lifecycle.push(`removed ${id}`));
+    const live = (sessionId: string) =>
+      fs.writeFileSync(
+        planted.sessionFile,
+        JSON.stringify({ pid: process.pid, sessionId, cwd: planted.cwd, tmux: 'demo:@2.%3' }),
+      );
+    live('88888888-8888-8888-8888-888888888888');
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    live(planted.sessionId);
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(lifecycle).toEqual([]);
+    expect([...planted.store.keys()]).toEqual([agent.id]);
+    expect(planted.store.get(agent.id)?.sessionId).toBe(planted.sessionId);
+    expect(planted.store.get(agent.id)?.jsonlFile).toBe(planted.jsonl);
+    expect(planted.store.get(agent.id)?.fileOffset).toBe(offsetBefore);
+  });
+
+  it('keeps an agent closed while it awaits its /clear transcript closed once that appears', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    planted.runtime.hooksEnabled.current = false;
+    const agent = [...planted.store.values()][0]!;
+    const nextSession = '99999999-9999-9999-9999-999999999999';
+    fs.writeFileSync(
+      planted.sessionFile,
+      JSON.stringify({
+        pid: process.pid,
+        sessionId: nextSession,
+        cwd: planted.cwd,
+        tmux: 'demo:@2.%3',
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(planted.store.get(agent.id)?.sessionId).toBe(nextSession);
+
+    handleClientMessage({ type: 'closeAgent', id: agent.id }, () => undefined, {
+      store: planted.store,
+      runtime: planted.runtime,
+      cache: null,
+    });
+    fs.writeFileSync(path.join(planted.projectDir, `${nextSession}.jsonl`), '{"type":"user"}\n');
+    await vi.advanceTimersByTimeAsync(DISMISSED_COOLDOWN_MS + CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect(planted.store.size).toBe(0);
+  });
+
   it('keeps an agent whose session id was already reassigned to the new registry session', async () => {
     vi.useFakeTimers();
     const planted = plant(true);

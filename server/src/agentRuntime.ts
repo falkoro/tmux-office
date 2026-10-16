@@ -616,8 +616,13 @@ export class AgentRuntime {
    * it, tracks its transcript or is about to claim it, and the user did not
    * dismiss it. `jsonlFile` is null while the session has no transcript yet.
    */
-  private unclaimed(session: LiveClaudeSession, jsonlFile: string | null): boolean {
+  private unclaimed(
+    session: LiveClaudeSession,
+    jsonlFile: string | null,
+    mover?: AgentState,
+  ): boolean {
     for (const agent of this.store.values()) {
+      if (agent === mover) continue;
       if (agent.sessionId === session.sessionId) return false;
       if (agent.clearedFromSessionId === session.sessionId) return false;
       if (!jsonlFile) continue;
@@ -654,8 +659,9 @@ export class AgentRuntime {
     const agent = [...this.store.values()].find(
       (a) => own(a) && a.livePid === session.pid && !live.has(a.sessionId),
     );
-    if (agent && this.unclaimed(session, jsonlFile)) {
-      this.moveAgentToSession(agent.id, session.sessionId, jsonlFile ?? undefined);
+    if (agent && this.unclaimed(session, jsonlFile, agent)) {
+      const newFile = jsonlFile && !pathsMatch(agent.jsonlFile, jsonlFile) ? jsonlFile : undefined;
+      this.moveAgentToSession(agent.id, session.sessionId, newFile);
     }
   }
 

@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import * as path from 'path';
 
 import type { HookProvider } from '../../core/src/provider.js';
 import { resendAgentActivity } from './agentActivityResend.js';
@@ -106,6 +107,9 @@ export function handleClientMessage(
       const agent = store.get(id);
       if (agent && runtime) {
         runtime.dismissalTracker.close(agent.jsonlFile);
+        runtime.dismissalTracker.close(
+          path.join(path.dirname(agent.jsonlFile), `${agent.sessionId}.jsonl`),
+        );
         for (const teammate of store.values()) {
           if (teammate.leadAgentId === id) runtime.dismissalTracker.close(teammate.jsonlFile);
         }
