@@ -20,7 +20,7 @@ buildDynamicCatalog({
       isDesk: false,
     },
   ],
-  sprites: { TEST_CHAIR: [['#ffffffff']] },
+  sprites: { TEST_CHAIR: [['']] },
 });
 
 const layout: OfficeLayout = {
