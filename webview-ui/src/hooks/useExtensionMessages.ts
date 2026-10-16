@@ -3,7 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { HooksConsentRequest, OfficeRooms } from '../../../core/src/messages.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
-import { clearMissingTerminals, reconcileExistingAgents } from '../office/engine/existingAgents.js';
+import {
+  agentsMissingFrom,
+  clearMissingTerminals,
+  reconcileExistingAgents,
+} from '../office/engine/existingAgents.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import { setGhostHeadlessAgents as setRendererGhostHeadlessAgents } from '../office/engine/renderer.js';
 import { setFloorSprites } from '../office/floorTiles.js';
@@ -224,6 +228,41 @@ export function useExtensionMessages(
       ch.tmux = info.tmux;
     };
 
+    const closeAgent = (id: number): void => {
+      const os = getOfficeState();
+      setAgents((prev) => prev.filter((a) => a !== id));
+      setSelectedAgent((prev) => (prev === id ? null : prev));
+      setAgentTools((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setAgentStatuses((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setSubagentTools((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      // Remove all sub-agent characters belonging to this agent
+      delete backgroundParentToolIdsRef.current[id];
+      os.removeAllSubagents(id);
+      setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
+      os.removeAgent(id);
+      if (id in terminalsRef.current) {
+        const next = { ...terminalsRef.current };
+        delete next[id];
+        terminalsRef.current = next;
+        setAgentTerminals(next);
+      }
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handler = (msg: any) => {
       const os = getOfficeState();
@@ -345,38 +384,7 @@ export function useExtensionMessages(
         }
         saveAgentSeats(os);
       } else if (msg.type === 'agentClosed') {
-        const id = msg.id as number;
-        setAgents((prev) => prev.filter((a) => a !== id));
-        setSelectedAgent((prev) => (prev === id ? null : prev));
-        setAgentTools((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        setAgentStatuses((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        setSubagentTools((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        // Remove all sub-agent characters belonging to this agent
-        delete backgroundParentToolIdsRef.current[id];
-        os.removeAllSubagents(id);
-        setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
-        os.removeAgent(id);
-        if (id in terminalsRef.current) {
-          const next = { ...terminalsRef.current };
-          delete next[id];
-          terminalsRef.current = next;
-          setAgentTerminals(next);
-        }
+        closeAgent(msg.id as number);
       } else if (msg.type === 'agentTerminal') {
         const id = msg.id as number;
         applyTerminal(id, {
@@ -410,16 +418,11 @@ export function useExtensionMessages(
         ) {
           saveAgentSeats(os);
         }
-        setAgents((prev) => {
-          const ids = new Set(prev);
-          const merged = [...prev];
-          for (const id of incoming) {
-            if (!ids.has(id)) {
-              merged.push(id);
-            }
-          }
-          return merged.sort((a, b) => a - b);
-        });
+        for (const id of agentsMissingFrom(os.characters.keys(), incoming)) closeAgent(id);
+        setAgents([...incoming].sort((a, b) => a - b));
+        setAgentTools({});
+        setAgentStatuses({});
+        setSubagentTools({});
         const incomingTerminals = msg.agentTerminals as
           Record<string, { name?: string | null; tmux?: unknown }> | undefined;
         terminalsRef.current = {};

@@ -72,9 +72,9 @@ input_for() {
 }
 
 start_rig() {
+  [[ -f "$root/dist/cli.js" ]] || { echo "build first: npm run build" >&2; exit 1; }
   stop_rig
   mkdir -p "$dir/home" "$dir/panes"
-  [[ -f "$root/dist/cli.js" ]] || { echo "build first: npm run build" >&2; exit 1; }
 
   local i=0 spec session window cfg state cols rows sid cwd proj file pid loc
   for spec in "${agents[@]}"; do

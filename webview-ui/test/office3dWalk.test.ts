@@ -18,7 +18,7 @@ import {
   CHARACTER_SEAT_HEIGHT,
 } from '../src/office3d/characters.js';
 import type { WalkKeys } from '../src/office3d/walk.js';
-import { stepWalk, walkDirection, walkForward, walkFromCamera } from '../src/office3d/walk.js';
+import { stepWalk, walkDirection, walkFromCamera } from '../src/office3d/walk.js';
 
 const bounds = { minX: -10, maxX: 10, minZ: -10, maxZ: 10 };
 const idle: WalkKeys = { forward: false, back: false, left: false, right: false, run: false };
@@ -29,11 +29,19 @@ describe('stepWalk', () => {
     const dt = 0.5;
     const speed = OFFICE3D_WALK_SPEED * dt;
     const ahead: WalkKeys = { ...idle, forward: true };
-    for (const yaw of [0, 0.4, -1.2, Math.PI / 2]) {
+    // A camera looks down -z; a positive yaw turns it left (counterclockwise seen from above).
+    const expected: Array<[number, number, number]> = [
+      [0, 0, -1],
+      [Math.PI / 2, -1, 0],
+      [-Math.PI / 2, 1, 0],
+      [Math.PI, 0, 1],
+      [Math.PI / 4, -Math.SQRT1_2, -Math.SQRT1_2],
+    ];
+    for (const [yaw, x, z] of expected) {
       const next = stepWalk({ x: 2, z: -3 }, yaw, ahead, dt, bounds);
-      const fwd = walkForward(yaw);
-      near(next.x - 2, fwd.x * speed);
-      near(next.z - -3, fwd.z * speed);
+      const step = Math.hypot(next.x - 2, next.z + 3);
+      near((next.x - 2) / step, x);
+      near((next.z + 3) / step, z);
     }
     const right = stepWalk({ x: 0, z: 0 }, 0, { ...idle, right: true }, dt, bounds);
     near(right.x, speed);

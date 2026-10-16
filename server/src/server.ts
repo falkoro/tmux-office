@@ -87,6 +87,11 @@ export class PixelAgentsServer {
     // stale file never blocks discovery of a live one.
     const registry = this.readAndPruneRegistry();
     const candidate = registry.find((e) => e.servesSpa === wantsSpa);
+    if (candidate && (options?.access || options?.officeFeed || options?.insecureLocalTerminal)) {
+      throw new Error(
+        `[Pixel Agents] A ${wantsSpa ? 'standalone' : 'embedded'} server is already running on port ${candidate.port} (PID ${candidate.pid}); it cannot take this server's Access, office feed or terminal settings. Stop it and start again.`,
+      );
+    }
     if (candidate) {
       this.config = candidate;
       this.ownsServer = false;

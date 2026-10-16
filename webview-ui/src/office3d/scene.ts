@@ -671,7 +671,7 @@ export class RoomView {
 
   private syncRoster(room: RoomModel): void {
     const desks = roomDesks(room);
-    const key = JSON.stringify(desks.map((d) => [d.agentId, d.label, d.status]));
+    const key = JSON.stringify(desks.map((d) => [d.agentId, d.name, d.label, d.status]));
     if (key === this.rosterKey) return;
     this.rosterKey = key;
     this.rosterEl.replaceChildren(

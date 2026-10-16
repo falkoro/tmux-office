@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { createSign, generateKeyPairSync } from 'node:crypto';
 import { promisify } from 'node:util';
 
@@ -183,7 +183,9 @@ describe('/ws/term gate', () => {
   });
 });
 
-describe('/ws/term attach', () => {
+const hasTmux = spawnSync('tmux', ['-V']).status === 0;
+
+describe.skipIf(!hasTmux)('/ws/term attach', () => {
   const socketName = `pa-test-${process.pid}-${Date.now()}`;
   let handle: HttpServerHandle | undefined;
   let paneId = '';

@@ -128,6 +128,13 @@ function beamGeometry(): BufferGeometry {
   return geo;
 }
 
+/** `desk · slot`, with the slot's lift off the floor in world units so it clears a rug on any desk scale. */
+function onFloor(out: Matrix4, desk: Matrix4, slot: Matrix4): Matrix4 {
+  out.multiplyMatrices(desk, slot);
+  out.elements[13] = desk.elements[13] + slot.elements[13];
+  return out;
+}
+
 export class Effects {
   readonly group = new Group();
   private readonly geometries: BufferGeometry[];
@@ -212,7 +219,7 @@ export class Effects {
       );
       this.pools.set(
         i,
-        this.m.multiplyMatrices(desk.matrix, SLOT.pool),
+        onFloor(this.m, desk.matrix, SLOT.pool),
         this.color.setHex(hex).multiplyScalar(POOL[desk.status]),
       );
     });
@@ -225,14 +232,14 @@ export class Effects {
       .sort(
         (a, b) => Number(b.status === 'needs-permission') - Number(a.status === 'needs-permission'),
       );
-    this.ringBase = marked.map((d) => new Matrix4().multiplyMatrices(d.matrix, SLOT.seat));
+    this.ringBase = marked.map((d) => onFloor(new Matrix4(), d.matrix, SLOT.seat));
     this.ringStatus = marked.map((d) => d.status);
     this.beamCount = marked.filter((d) => d.status === 'needs-permission').length;
     this.rings.size(marked.length);
     this.beams.size(this.beamCount);
 
     this.selection.visible = selected !== null;
-    if (selected) this.selection.matrix.multiplyMatrices(selected, SLOT.seat);
+    if (selected) onFloor(this.selection.matrix, selected, SLOT.seat);
   }
 
   /** Throw a handful of confetti above a seat (world position, desk scale). */

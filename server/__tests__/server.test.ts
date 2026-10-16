@@ -193,6 +193,16 @@ describe('PixelAgentsServer', () => {
     server2.stop();
   });
 
+  it('refuses to reuse a running server when this start brings terminal, Access or feed settings', async () => {
+    const config1 = await server.start({ embedded: false });
+    const server2 = new PixelAgentsServer();
+    await expect(server2.start({ embedded: false, insecureLocalTerminal: true })).rejects.toThrow(
+      `port ${config1.port} (PID ${config1.pid})`,
+    );
+    expect(registryFiles()).toHaveLength(1);
+    server2.stop();
+  });
+
   // 13. Capability mismatch: a standalone caller never reuses an embedded server
   it('standalone does not reuse an existing embedded server; starts its own', async () => {
     const config1 = await server.start({ embedded: true });

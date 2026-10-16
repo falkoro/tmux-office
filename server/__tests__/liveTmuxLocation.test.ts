@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 
 import * as fs from 'fs';
@@ -28,6 +28,8 @@ const execFileAsync = promisify(execFile);
 
 const movedPane: TmuxPaneRecord = { paneId: '%5', session: 'work-5', windowId: '@9' };
 const registryTmux: TmuxLocation = { session: 'work-3', windowId: '@5', paneId: '%5' };
+
+const hasTmux = spawnSync('tmux', ['-V']).status === 0;
 
 describe('resolveLiveTmuxLocations', () => {
   const sessions = [{ sessionId: 's1', tmux: registryTmux }];
@@ -137,7 +139,23 @@ describe('tmux pane list', () => {
     ]);
   });
 
-  it('reads panes from a private tmux socket', async () => {
+  it('warns once and reads the default server when the socket name is not a tmux -L name', () => {
+    const previous = process.env.PIXEL_AGENTS_TMUX_SOCKET;
+    process.env.PIXEL_AGENTS_TMUX_SOCKET = 'my.sock';
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      expect(listTmuxPanesArgv()[0]).toBe('list-panes');
+      expect(listTmuxPanesArgv()[0]).toBe('list-panes');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0][0])).toContain('my.sock');
+    } finally {
+      warn.mockRestore();
+      if (previous === undefined) delete process.env.PIXEL_AGENTS_TMUX_SOCKET;
+      else process.env.PIXEL_AGENTS_TMUX_SOCKET = previous;
+    }
+  });
+
+  it.skipIf(!hasTmux)('reads panes from a private tmux socket', async () => {
     const socketName = `pa-test-panes-${process.pid}-${Date.now()}`;
     const previous = process.env.PIXEL_AGENTS_TMUX_SOCKET;
     process.env.PIXEL_AGENTS_TMUX_SOCKET = socketName;

@@ -96,3 +96,12 @@ export function clearMissingTerminals(
     ch.sessionName = null;
   }
 }
+
+/**
+ * Top-level agents (id > 0) on screen that a snapshot no longer lists: they
+ * ended while the client was away and their agentClosed never arrived.
+ */
+export function agentsMissingFrom(characterIds: Iterable<number>, incoming: number[]): number[] {
+  const live = new Set(incoming);
+  return [...characterIds].filter((id) => id > 0 && !live.has(id));
+}

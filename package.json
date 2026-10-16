@@ -6,7 +6,7 @@
   "publisher": "pablodelucca",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pixel-agents-hq/pixel-agents"
+    "url": "https://github.com/falkoro/tmux-office"
   },
   "workspaces": [
     "server",

@@ -22,10 +22,19 @@ export function throwawaySessionName(): string {
   return `${THROWAWAY_PREFIX}${randomBytes(THROWAWAY_ID_BYTES).toString('hex')}`;
 }
 
+let warnedSocketName = false;
+
 export function tmuxSocketName(): string | undefined {
   const name = process.env.PIXEL_AGENTS_TMUX_SOCKET;
-  if (!name || !SOCKET_NAME.test(name)) return undefined;
-  return name;
+  if (!name) return undefined;
+  if (SOCKET_NAME.test(name)) return name;
+  if (!warnedSocketName) {
+    warnedSocketName = true;
+    console.warn(
+      `[Pixel Agents] Ignoring PIXEL_AGENTS_TMUX_SOCKET=${JSON.stringify(name)}: it must be a tmux -L name of letters, digits, '_' or '-'. Reading the default tmux server.`,
+    );
+  }
+  return undefined;
 }
 
 /** `-L <name>` when PIXEL_AGENTS_TMUX_SOCKET is set, otherwise nothing. */

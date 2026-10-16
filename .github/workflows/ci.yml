@@ -136,6 +136,10 @@ jobs:
 
       # --- Server Tests (require build for hook script) ---
 
+      - name: Install tmux
+        if: always() && steps.install_dependencies.outcome == 'success'
+        run: sudo apt-get update && sudo apt-get install -y tmux
+
       - name: Server Tests
         id: server_test
         if: always() && steps.build.outcome == 'success' && steps.install_dependencies.outcome == 'success'

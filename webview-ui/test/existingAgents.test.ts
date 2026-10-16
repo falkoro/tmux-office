@@ -24,6 +24,7 @@ import type {
   PendingAgent,
 } from '../src/office/engine/existingAgents.js';
 import {
+  agentsMissingFrom,
   clearMissingTerminals,
   reconcileExistingAgents,
 } from '../src/office/engine/existingAgents.js';
@@ -198,4 +199,8 @@ test('reconnect: a character missing from the terminal snapshot loses its pane a
   assert.equal(gone.sessionName, null);
   assert.deepEqual(kept.tmux, pane);
   assert.equal(kept.sessionName, 'demo');
+});
+
+test('reconnect: an agent the snapshot no longer lists is closed, its sub-agents are left to it', () => {
+  assert.deepEqual(agentsMissingFrom([1, 3, -1, 5], [1, 5, 7]), [3]);
 });

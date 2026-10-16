@@ -79,7 +79,7 @@ export const SLOT = {
   /** Screen light falling on its user, a unit quad. */
   glow: MONITOR.clone().multiply(compose(0, SCREEN_Y - 0.05, 0.3, 0, 1.3, 1.0, 1)),
   /** The status light pool on the floor around the desk, a unit floor quad. */
-  // Both sit high enough to clear a rug even on a porch desk, which is scaled down.
+  // Both lifts are world units (Effects keeps them unscaled), clear of a rug's top.
   pool: compose(0, 0.045, -0.1, 0, 2.3, 1, 2.2),
   /** Rings and beams stand around the seat. */
   seat: compose(0, 0.05, SZ, 0),
