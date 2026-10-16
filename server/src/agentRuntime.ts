@@ -267,6 +267,7 @@ export class AgentRuntime {
         const agent = this.store.get(agentId);
         if (agent) {
           this.unregisterAgent(agent.sessionId);
+          if (agent.sessionId !== newSessionId) agent.clearedFromSessionId = agent.sessionId;
           agent.sessionId = newSessionId;
           this.registerAgent(agent.sessionId, agent.id);
         }
@@ -570,7 +571,8 @@ export class AgentRuntime {
   /**
    * Drop top-level agents whose session is no longer in the registry.
    * Children stay while their lead stays, and leave with the lead. A child
-   * whose lead is gone is judged by its own session.
+   * whose lead is gone is judged by its own session. An agent moved by /clear
+   * stays while the registry still shows the session it was moved from.
    * The transcript is not dismissed: a new pid with the same session id
    * must be adopted on a later tick.
    */
@@ -581,6 +583,7 @@ export class AgentRuntime {
     for (const [id, agent] of this.store) {
       if (agent.leadAgentId !== undefined && this.store.has(agent.leadAgentId)) continue;
       if (live.has(agent.sessionId)) continue;
+      if (agent.clearedFromSessionId && live.has(agent.clearedFromSessionId)) continue;
       departing.push(id);
     }
     for (const id of departing) {

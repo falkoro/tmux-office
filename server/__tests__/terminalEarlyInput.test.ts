@@ -5,11 +5,13 @@ import type { AttachedTerminal } from '../src/tmuxTerminal.js';
 
 const written: string[] = [];
 let finishAttach: ((term: AttachedTerminal) => void) | null = null;
+let paneOutput: ((data: string) => void) | null = null;
 
 vi.mock('../src/tmuxTerminal.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/tmuxTerminal.js')>()),
-  attachTmuxPane: () =>
+  attachTmuxPane: (_location: unknown, onData: (data: string) => void) =>
     new Promise<AttachedTerminal>((resolve) => {
+      paneOutput = onData;
       finishAttach = resolve;
     }),
 }));
@@ -36,7 +38,7 @@ describe('/ws/term input during attach', () => {
     await (await ready).app.close();
   });
 
-  it('types keystrokes sent before the pane attached, in order, once it attaches', async () => {
+  it('types keystrokes sent before tmux first draws, in order, once it draws', async () => {
     const { port } = await ready;
     const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/term?agentId=1&token=test-token`);
     await new Promise<void>((resolve, reject) => {
@@ -57,8 +59,13 @@ describe('/ws/term input during attach', () => {
       stop: () => undefined,
     } as unknown as AttachedTerminal);
     socket.send(Buffer.from('ls\r'));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(written).toEqual([]);
 
-    await vi.waitFor(() => expect(written.join('')).toBe('echo hi\rls\r'));
+    paneOutput!('\x1b[?1049h');
+    socket.send(Buffer.from('y'));
+
+    await vi.waitFor(() => expect(written.join('')).toBe('echo hi\rls\ry'));
     socket.close();
   });
 });

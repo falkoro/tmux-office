@@ -42,7 +42,7 @@ server/                              Lifecycle runtime + Fastify HTTP/WS server
     httpServer.ts                    Fastify: POST /api/hooks/:providerId, GET /api/health, GET /ws, SPA (standalone)
     clientMessageHandler.ts          Single dispatch point for ClientMessage from webview
     server.ts                        Top-level composition
-    cli.ts                           npx pixel-agents entry (npm bin)
+    cli.ts                           Standalone CLI entry (`node dist/cli.js`)
     fileStateAdapter.ts              Namespaced ~/.pixel-agents/ persistence
     configPersistence.ts             { vscode, standalone, externalAssetDirectories, hooksConsent: {providerId: granted|declined}, hooksEnabled: {providerId: boolean} }
     layoutPersistence.ts             ~/.pixel-agents/layout.json with atomic tmp+rename

@@ -14,7 +14,7 @@ import {
   EXTERNAL_SCAN_INTERVAL_MS,
   PROJECT_SCAN_INTERVAL_MS,
 } from '../src/constants.js';
-import { setTerminalAdapter } from '../src/fileWatcher.js';
+import { reassignAgentToFile, setTerminalAdapter } from '../src/fileWatcher.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
 import { ClaudeSessionRegistry } from '../src/providers/hook/claude/claudeSessionRegistry.js';
 import { CLAUDE_TERMINAL_NAME_PREFIX } from '../src/providers/hook/claude/constants.js';
@@ -390,6 +390,41 @@ describe('live-only', () => {
     expect(planted.runtime.subagentWatch.isWatching(subFile)).toBe(false);
   });
 
+  it('keeps the live own-session teammate of a closed lead closed after the cooldown', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    const lead = [...planted.store.values()][0]!;
+    const teammateSession = '55555555-5555-5555-5555-555555555555';
+    const teammateJsonl = path.join(planted.projectDir, `${teammateSession}.jsonl`);
+    fs.writeFileSync(teammateJsonl, '{"type":"user"}\n');
+    fs.writeFileSync(
+      path.join(path.dirname(planted.sessionFile), '2.json'),
+      JSON.stringify({ pid: process.pid, sessionId: teammateSession, cwd: planted.cwd }),
+    );
+    planted.store.set(
+      40,
+      bareAgent({
+        id: 40,
+        sessionId: teammateSession,
+        projectDir: planted.projectDir,
+        jsonlFile: teammateJsonl,
+        leadAgentId: lead.id,
+        agentName: 'researcher',
+      }),
+    );
+
+    handleClientMessage({ type: 'closeAgent', id: lead.id }, () => undefined, {
+      store: planted.store,
+      runtime: planted.runtime,
+      cache: null,
+    });
+    expect(planted.store.size).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(DISMISSED_COOLDOWN_MS + CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect(planted.store.size).toBe(0);
+  });
+
   it('removes a teammate whose lead is gone once its own session leaves', async () => {
     vi.useFakeTimers();
     const planted = plant(true);
@@ -468,6 +503,36 @@ describe('live-only', () => {
     await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
     expect([...planted.store.keys()]).toEqual([agent!.id]);
     expect(planted.store.get(agent!.id)?.sessionId).toBe(nextSession);
+  });
+
+  it('keeps an agent moved by /clear while the registry still shows its old session', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    const agent = [...planted.store.values()][0]!;
+    const nextSession = '44444444-4444-4444-4444-444444444444';
+    const nextJsonl = path.join(planted.projectDir, `${nextSession}.jsonl`);
+    fs.writeFileSync(nextJsonl, '{"type":"user"}\n');
+    reassignAgentToFile(
+      agent.id,
+      nextJsonl,
+      planted.store,
+      planted.runtime.fileWatchers,
+      planted.runtime.pollingTimers,
+      planted.runtime.waitingTimers,
+      planted.runtime.permissionTimers,
+      () => undefined,
+    );
+
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect([...planted.store.keys()]).toEqual([agent.id]);
+
+    fs.writeFileSync(
+      planted.sessionFile,
+      JSON.stringify({ pid: process.pid, sessionId: nextSession, cwd: planted.cwd }),
+    );
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect([...planted.store.keys()]).toEqual([agent.id]);
+    expect(planted.store.get(agent.id)?.sessionId).toBe(nextSession);
   });
 
   it('keeps a sub-agent and an inline teammate of a live lead', async () => {

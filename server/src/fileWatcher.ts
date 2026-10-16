@@ -1639,6 +1639,7 @@ export function reassignAgentToFile(
 
   // Swap to new file (update sessionId for hook registration).
   // Keep hookDelivered — if hooks worked before /clear, they'll work after.
+  agent.clearedFromSessionId = agent.sessionId;
   agent.sessionId = path.basename(newFilePath, '.jsonl');
   agent.jsonlFile = newFilePath;
   agent.fileOffset = 0;

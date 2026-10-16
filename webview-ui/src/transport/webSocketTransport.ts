@@ -59,13 +59,13 @@ export class WebSocketTransport implements MessageTransport {
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
       console.log('[Transport] WebSocket connected');
-      this.setState(TRANSPORT_STATE_CONNECTED);
-      this.resolveReady();
       // Flush any messages queued while connecting
       for (const msg of this.pendingMessages) {
         this.ws!.send(JSON.stringify(msg));
       }
       this.pendingMessages = [];
+      this.setState(TRANSPORT_STATE_CONNECTED);
+      this.resolveReady();
     };
 
     this.ws.onmessage = (e: MessageEvent) => {

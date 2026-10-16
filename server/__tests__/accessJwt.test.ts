@@ -1,4 +1,10 @@
-import { createSign, generateKeyPairSync, type KeyObject } from 'node:crypto';
+import {
+  createHmac,
+  createPublicKey,
+  createSign,
+  generateKeyPairSync,
+  type KeyObject,
+} from 'node:crypto';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -76,13 +82,24 @@ describe('verifyAccessJwt', () => {
     expect(result).toEqual({ ok: false, reason: 'expired' });
   });
 
-  it('rejects alg none', () => {
-    const header = Buffer.from(JSON.stringify({ alg: 'none', kid: 'test-key' })).toString(
+  it('rejects alg none even when the signature itself is valid', () => {
+    const token = sign(privateKey, payload(), 'test-key', 'none');
+    const result = verifyAccessJwt(token, { issuer: ISSUER, aud: AUD }, keys);
+    expect(result).toEqual({ ok: false, reason: 'alg' });
+  });
+
+  it('rejects an HS256 token keyed with the public key', () => {
+    const publicPem = createPublicKey({ key: jwks.keys![0]!, format: 'jwk' }).export({
+      type: 'spki',
+      format: 'pem',
+    });
+    const header = Buffer.from(JSON.stringify({ alg: 'HS256', kid: 'test-key' })).toString(
       'base64url',
     );
     const body = Buffer.from(JSON.stringify(payload())).toString('base64url');
-    const token = `${header}.${body}.`;
-    expect(verifyAccessJwt(token, { issuer: ISSUER, aud: AUD }, keys).ok).toBe(false);
+    const mac = createHmac('sha256', publicPem).update(`${header}.${body}`).digest('base64url');
+    const result = verifyAccessJwt(`${header}.${body}.${mac}`, { issuer: ISSUER, aud: AUD }, keys);
+    expect(result).toEqual({ ok: false, reason: 'alg' });
   });
 });
 
