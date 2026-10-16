@@ -152,6 +152,20 @@ describe('resendAgentActivity', () => {
     expect(replayed).toEqual(live);
   });
 
+  it('sends no new status when an idle agent runs a bash-mode command', () => {
+    const store = new AgentStateStore();
+    store.set(1, createTestAgent({ id: 1, isWaiting: true }));
+    const statuses: Array<Record<string, unknown>> = [];
+    store.on('broadcast', (msg) => {
+      if (msg.type === 'agentStatus') statuses.push(msg);
+    });
+    for (const content of ['<bash-input>ls</bash-input>', '<bash-stdout>a.txt</bash-stdout>']) {
+      const line = JSON.stringify({ type: 'user', message: { content } });
+      processTranscriptLine(1, line, store, new Map(), new Map());
+    }
+    expect(statuses).toEqual([]);
+  });
+
   it('replays no active status for an agent moved to its /clear transcript', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-resend-'));
     const pollingTimers = new Map<number, ReturnType<typeof setInterval>>();

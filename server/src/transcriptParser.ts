@@ -27,7 +27,6 @@ function exemptTools(): ReadonlySet<string> {
   return hookProvider?.permissionExemptTools ?? EMPTY_EXEMPT_TOOLS;
 }
 
-/** Whether the given tool name spawns a sub-agent according to the active provider. */
 const COMMAND_OUTPUT = /^\s*<(bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>/;
 const COMMAND_INPUT = /^\s*<bash-input>/;
 
@@ -41,6 +40,7 @@ function localCommandRecord(content: string): 'input' | 'output' | null {
   return null;
 }
 
+/** Whether the given tool name spawns a sub-agent according to the active provider. */
 function isSubagentTool(toolName: string | null | undefined): boolean {
   if (!toolName || !hookProvider) return false;
   return hookProvider.subagentToolNames.has(toolName);
@@ -423,7 +423,7 @@ export function processTranscriptLine(
         cancelWaitingTimer(agentId, waitingTimers);
         clearAgentActivity(agent, agentId, agents, permissionTimers);
         const local = localCommandRecord(content);
-        if (local === 'output') {
+        if (local === 'output' && !agent.isWaiting) {
           agent.isWaiting = true;
           agent.awaitingInput = false;
           agent.midTurn = false;
@@ -433,7 +433,7 @@ export function processTranscriptLine(
             status: 'waiting',
             awaitingInput: false,
           });
-        } else if (local === 'input') agent.midTurn = false;
+        } else if (local) agent.midTurn = false;
         else startTurn(agent, agentId, agents);
         agent.hadToolsInTurn = false;
       }
