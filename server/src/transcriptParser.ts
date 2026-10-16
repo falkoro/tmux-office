@@ -433,7 +433,7 @@ export function processTranscriptLine(
           if (agent.activeToolIds.size === 0) {
             agent.hadToolsInTurn = false;
           }
-        } else {
+        } else if (!record.isMeta) {
           const first = blocks.find((b) => b.type === 'text') as { text?: unknown } | undefined;
           userText(typeof first?.text === 'string' ? first.text : '');
         }

@@ -31,7 +31,7 @@ export interface AccessVerifier {
 export function accessTeamHost(teamDomain: string): string {
   return teamDomain
     .trim()
-    .replace(/^https:\/\//, '')
+    .replace(/^https?:\/\//i, '')
     .replace(/\/$/, '');
 }
 

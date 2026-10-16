@@ -51,6 +51,15 @@ function payload(overrides: Record<string, unknown> = {}): Record<string, unknow
   return { aud: AUD, iss: ISSUER, exp: now + 60, nbf: now - 10, email: 'a@b', ...overrides };
 }
 
+describe('accessCertsUrl', () => {
+  it('reads the certs over https whatever scheme the team domain was given with', () => {
+    const certs = `https://${TEAM}/cdn-cgi/access/certs`;
+    expect(accessCertsUrl(TEAM)).toBe(certs);
+    expect(accessCertsUrl(`http://${TEAM}`)).toBe(certs);
+    expect(accessCertsUrl(`HTTPS://${TEAM}/`)).toBe(certs);
+  });
+});
+
 describe('verifyAccessJwt', () => {
   const { privateKey, jwks } = keyPair();
   const keys = keysFromJwks(jwks);
