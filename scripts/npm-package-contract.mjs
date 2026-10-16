@@ -1,11 +1,6 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 
-import semver from 'semver';
-
-export const EXPECTED_PACKAGE_NAME = 'pixel-agents';
-export const EXPECTED_REPOSITORY_URL = 'https://github.com/falkoro/tmux-office';
-
 // fastify + @fastify/{cors,static,websocket} are root runtime `dependencies` even though
 // no root source file imports them: esbuild marks them `external` when bundling
 // dist/cli.js (see esbuild.js), so the published `pixel-agents` bin resolves them from
@@ -109,44 +104,6 @@ export function validatePackageFiles(files) {
     throw new Error(`Invalid npm package contents:\n- ${problems.join('\n- ')}`);
   }
   return paths;
-}
-
-export function validateReleaseIdentity({
-  manifest,
-  releaseTag,
-  ref,
-  latestVersion,
-  exactVersionExists = false,
-}) {
-  if (manifest.name !== EXPECTED_PACKAGE_NAME) {
-    throw new Error(
-      `Expected package name ${EXPECTED_PACKAGE_NAME}, received ${String(manifest.name)}`,
-    );
-  }
-  if (manifest.repository?.url !== EXPECTED_REPOSITORY_URL) {
-    throw new Error(
-      `Expected repository ${EXPECTED_REPOSITORY_URL}, received ${String(manifest.repository?.url)}`,
-    );
-  }
-  if (!semver.valid(manifest.version)) {
-    throw new Error(`Invalid package version: ${String(manifest.version)}`);
-  }
-  const expectedTag = `v${manifest.version}`;
-  if (releaseTag !== expectedTag) {
-    throw new Error(`Release tag ${releaseTag} does not match package version ${expectedTag}`);
-  }
-  const expectedRef = `refs/tags/${releaseTag}`;
-  if (ref !== expectedRef) {
-    throw new Error(`Release ref ${ref} does not match ${expectedRef}`);
-  }
-  if (!semver.valid(latestVersion)) {
-    throw new Error(`Invalid npm latest version: ${String(latestVersion)}`);
-  }
-  if (!exactVersionExists && !semver.gt(manifest.version, latestVersion)) {
-    throw new Error(
-      `Package version ${manifest.version} must be greater than npm latest ${latestVersion}`,
-    );
-  }
 }
 
 export function getPublicationDecision(localIntegrity, publishedIntegrity) {

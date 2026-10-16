@@ -11,7 +11,6 @@ import {
   REQUIRED_PACKAGE_FILES,
   REQUIRED_PACKAGE_PREFIXES,
   validatePackageFiles,
-  validateReleaseIdentity,
   validateTarballIntegrity,
 } from './npm-package-contract.mjs';
 
@@ -50,51 +49,6 @@ test('rejects source and preview files even when required files exist', () => {
   assert.throws(
     () => validatePackageFiles([...validFiles(), { path: 'dist/browser/index.html' }]),
     /forbidden package path: dist\/browser\/index\.html/,
-  );
-});
-
-test('validates release tag, ref, repository, and monotonic version', () => {
-  const manifest = {
-    name: 'pixel-agents',
-    version: '1.4.0',
-    repository: { url: 'https://github.com/falkoro/tmux-office' },
-  };
-  assert.doesNotThrow(() =>
-    validateReleaseIdentity({
-      manifest,
-      releaseTag: 'v1.4.0',
-      ref: 'refs/tags/v1.4.0',
-      latestVersion: '1.0.2',
-    }),
-  );
-  assert.throws(
-    () =>
-      validateReleaseIdentity({
-        manifest,
-        releaseTag: 'v1.3.0',
-        ref: 'refs/tags/v1.3.0',
-        latestVersion: '1.0.2',
-      }),
-    /does not match package version/,
-  );
-  assert.throws(
-    () =>
-      validateReleaseIdentity({
-        manifest: { ...manifest, version: '1.0.2' },
-        releaseTag: 'v1.0.2',
-        ref: 'refs/tags/v1.0.2',
-        latestVersion: '1.0.2',
-      }),
-    /must be greater than npm latest/,
-  );
-  assert.doesNotThrow(() =>
-    validateReleaseIdentity({
-      manifest: { ...manifest, version: '1.0.2' },
-      releaseTag: 'v1.0.2',
-      ref: 'refs/tags/v1.0.2',
-      latestVersion: '1.0.2',
-      exactVersionExists: true,
-    }),
   );
 });
 

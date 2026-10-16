@@ -3,6 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { OfficeFeedState } from '../src/officeFeed.js';
+
 // Use isolated temp HOME to avoid touching real ~/.pixel-agents/
 let tmpBase: string;
 let serverJsonDir: string;
@@ -193,12 +195,21 @@ describe('PixelAgentsServer', () => {
     server2.stop();
   });
 
-  it('refuses to reuse a running server when this start brings terminal, Access or feed settings', async () => {
+  it('refuses to reuse a running server when this start brings terminal or Access settings', async () => {
     const config1 = await server.start({ embedded: false });
     const server2 = new PixelAgentsServer();
     await expect(server2.start({ embedded: false, insecureLocalTerminal: true })).rejects.toThrow(
       `port ${config1.port} (PID ${config1.pid})`,
     );
+    expect(registryFiles()).toHaveLength(1);
+    server2.stop();
+  });
+
+  it('still reuses a running server when this start only brings an office feed', async () => {
+    const config1 = await server.start({ embedded: false });
+    const server2 = new PixelAgentsServer();
+    const config2 = await server2.start({ embedded: false, officeFeed: {} as OfficeFeedState });
+    expect(config2.port).toBe(config1.port);
     expect(registryFiles()).toHaveLength(1);
     server2.stop();
   });
