@@ -216,11 +216,20 @@ describe('planOffice', () => {
     assert.ok(Math.abs(left + right) < 1e-9);
   });
 
-  test('a narrow viewport adds front floor for each room name list', () => {
-    const wide = planOffice(rooms(4, 2), DESKTOP).rooms[0];
-    const phone = planOffice(rooms(4, 2), PHONE).rooms[0];
-    const frontFloor = (r: RoomSpot) => r.z + r.depth / 2 - (front(r) + r.pods[0].depth / 2);
-    assert.ok(frontFloor(phone) - frontFloor(wide) >= OFFICE3D_ROSTER_LINE_DEPTH - 1e-9);
+  test('every room reserves floor in front of its pods for the lines of its name list', () => {
+    // office3d.css lays the list out two names per line on a phone, porchRosterColumns on a wide stage.
+    for (const [aspect, perLine] of [
+      [PHONE, () => 2],
+      [DESKTOP, porchRosterColumns],
+      [1366 / 768, porchRosterColumns],
+    ] as const) {
+      for (const r of planOffice(demo(), aspect).rooms) {
+        const lines = Math.ceil(r.desks.length / perLine(r.width));
+        const podsFront = Math.max(...r.pods.map((p) => p.z + p.depth / 2));
+        const floor = r.z + r.depth / 2 - podsFront;
+        assert.ok(floor >= lines * OFFICE3D_ROSTER_LINE_DEPTH - 1e-9, `${r.id} at ${aspect}`);
+      }
+    }
   });
 
   test('a lone desk is centred in its pod and its room', () => {

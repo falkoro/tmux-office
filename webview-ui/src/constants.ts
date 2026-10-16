@@ -356,13 +356,13 @@ export const OFFICE3D_CONFETTI_S = 1.4;
 export const OFFICE3D_DEPTH_FORESHORTEN = 0.65;
 /** Viewports narrower than this (width/height) get the phone treatment. */
 export const OFFICE3D_NARROW_ASPECT = 0.8;
-/** Extra floor at the front of each room on narrow viewports, per line of its name list. */
+/** Extra floor at the front of each room, per line of its name list. */
 export const OFFICE3D_ROSTER_LINE_DEPTH = 1.1;
-/** Names per line of that list; office3d.css lays it out in the same number of columns. */
+/** Names per line of that list on narrow viewports; office3d.css lays it out in the same number of columns. */
 export const OFFICE3D_NARROW_ROSTER_COLUMNS = 2;
 /** Desk size on the porch behind the rooms, relative to a room desk. */
 export const OFFICE3D_BACKGROUND_SCALE = 0.65;
-/** Porch width per name of its roster line on wide viewports, where that list runs across the porch (m). */
+/** Room width per name of its roster line on wide viewports, where that list runs across the room (m). */
 export const OFFICE3D_BACKGROUND_ROSTER_NAME_W = 5;
 /** Helpers per row in front of their parent's desk label. */
 export const OFFICE3D_HELPERS_PER_ROW = 5;

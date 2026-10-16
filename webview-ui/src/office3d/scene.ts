@@ -604,9 +604,7 @@ export class RoomView {
       '--o3d-room-w',
       (spot.width + OFFICE3D_ROOM_GAP * 0.9).toFixed(2),
     );
-    if (spot.background) {
-      this.rosterEl.style.setProperty('--o3d-roster-cols', String(porchRosterColumns(spot.width)));
-    }
+    this.rosterEl.style.setProperty('--o3d-roster-cols', String(porchRosterColumns(spot.width)));
     for (const pod of spot.pods) {
       const sign = this.signs.get(pod.id);
       if (!sign) continue;

@@ -202,7 +202,7 @@ interface RoomShape {
   width: number;
   /** Floor from the back wall to the front of the last pod row. */
   inner: number;
-  /** Floor in front of the pods: the walkway, plus a name list on narrow viewports. */
+  /** Floor in front of the pods: the walkway, plus the lines of its name list. */
   front: number;
   scale: number;
 }
@@ -210,7 +210,7 @@ interface RoomShape {
 const EMPTY_INNER_W = OFFICE3D_DESK_PITCH_X + 2 * OFFICE3D_POD_PAD;
 const EMPTY_INNER_D = OFFICE3D_DESK_PITCH_Z * 0.6;
 
-/** Names per line of the porch's name list on a wide viewport; office3d.css lays it out in as many columns. */
+/** Names per line of a room's name list on a wide viewport; office3d.css lays it out in as many columns. */
 export function porchRosterColumns(width: number): number {
   return Math.max(1, Math.floor(width / OFFICE3D_BACKGROUND_ROSTER_NAME_W));
 }
@@ -224,11 +224,7 @@ function roomShapes(room: RoomModel, narrow: boolean, scale: number, minWidth = 
   const desks = roomDesks(room).length;
   const front = (width: number) =>
     OFFICE3D_ROOM_PAD_FRONT +
-    (narrow
-      ? Math.ceil(desks / OFFICE3D_NARROW_ROSTER_COLUMNS)
-      : scale < 1
-        ? Math.ceil(desks / porchRosterColumns(width))
-        : 0) *
+    Math.ceil(desks / (narrow ? OFFICE3D_NARROW_ROSTER_COLUMNS : porchRosterColumns(width))) *
       OFFICE3D_ROSTER_LINE_DEPTH;
   const padBack = OFFICE3D_ROOM_PAD_BACK * scale;
   if (boxes.length === 0) {
@@ -313,9 +309,9 @@ const ROOM_TARGETS = [0.5, 0.7, 0.9, 1.2, 1.6, 2.1, 2.8];
  * a few room shapes and keeps the one that lets the whole office fill the most of
  * a viewport with the given width/height `aspect`. The background is a porch
  * behind the grid, at least as wide as it, with smaller desks and a wrapped name
- * list; its pods take the row width that fills the viewport best. On
- * a narrow viewport rooms are too small on screen for per-desk labels, so each
- * room gets extra floor at the front for a list of its agents.
+ * list; its pods take the row width that fills the viewport best. When rooms
+ * are too small on screen for per-desk labels they list their agents instead,
+ * so each room gets extra floor at the front for that list.
  */
 export function planOffice(rooms: RoomModel[], aspect: number): OfficePlan {
   const narrow = aspect < OFFICE3D_NARROW_ASPECT;

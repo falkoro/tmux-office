@@ -41,7 +41,7 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - A card shows a short name. It drops the agent name's trailing hex id, such as `-c9`, and turns `-` and `_` into spaces. The id is exactly two hex characters, so `web-2024` keeps its ending. An overseer's card also drops the literal start of the glob that made it overseer, so `lead-api-c9` under `lead-*` reads `api`. That start is dropped only at a word boundary, so `leader-c9` under `lead*` reads `leader`. Two desks whose short names match show their whole names. The card's tooltip always has the whole name.
 - Density follows the desk pitch on screen. Full shows name and activity. Compact shows the name. Roster replaces desk labels with a per-room name list.
 - A label is as wide as its own desk's pitch on screen, measured from that desk's depth, so the back row's narrower labels never overlap their neighbours. Crew desks are smaller but keep the full pitch, so their cards are as wide as the overseer's and their text is smaller. Names are never cut. A long name wraps between words.
-- On a phone the roster has two columns in floor that `planOffice` reserves in front of the pods.
+- The roster sits in floor that `planOffice` reserves in front of each room's pods. It has two columns on a phone and one per 5 m of room width on a wider stage.
 - The room bar lists the rooms. When one room is focused, or there is only one, it also lists that room's pods.
 - `#work` focuses the room. `#work-8` focuses the pod. A room wins a name it shares with a session, so that session is `#session:work`. The hash follows back and forward.
 - A click picks the nearest desk or helper with a ray against boxes. It dismisses the bubble, toggles selection and calls `App.handleClick`, so the terminal panel opens as in the 2D view. Sub-agents route to their parent.
@@ -71,7 +71,7 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - Rotate and scale badge animations. CSS2DRenderer owns `transform`, and the separate properties act on its translation, so badges flew off. Badges now move with `translate` only.
 - Pod signs inside the rug: they covered the second line of compact names. Signs now hang from the rug's front edge.
 - A room label above the back wall: it covered the porch desks. It now hangs on the wall.
-- A single-column phone roster: it covered the pinned pod.
+- A single-column roster: on a phone and on a 1366 or 1600 px desktop it covered the pinned pod.
 - Name cards on the floor in front of each desk: the crew's badges painted over the overseer's card. Cards now hang on the desk front.
 - The crew in a two-by-two grid: a back crew desk's badge covered the card in front of it. The crew now sits in one row.
 - Goblins beside their parent's desk: the name card covered them. They now stand in front of it.
@@ -82,6 +82,7 @@ The 3D office answers two questions at a glance: what is each session doing, and
 - In the overview a long name wraps to up to four lines, and a word wider than its desk, such as `internationalisation`, breaks inside the word.
 - On a phone the roster's two-line names can cover the pinned pod's sign. The pinned desk itself stays in view.
 - On a phone the porch name list covers the porch desks.
+- On a 1366 or 1600 px desktop the porch's one-line name list touches the bottom of the porch plaques. Perspective shrinks the porch's floor on screen, and the list keeps its font size.
 - A "?" badge on a back-row desk can overlap the label of the desk in front.
 - A session with more than four crew gets a second crew row, which brings that badge overlap back.
 - Twenty goblins on one desk reach the crew desks in front of it.
