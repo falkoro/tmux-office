@@ -104,7 +104,7 @@ import { Effects } from './effects.js';
 import type { OfficeFurniture } from './furniture.js';
 import { buildOffice, radialTexture } from './furniture.js';
 import type { Bounds, DeskSpot, OfficePlan, RoomSpot } from './layout.js';
-import { fitKey, focusArea, planOffice } from './layout.js';
+import { fitKey, focusArea, planOffice, porchRosterColumns } from './layout.js';
 import type { DeskModel, DeskStatus, Focus, HelperModel, PodModel, RoomModel } from './model.js';
 import {
   BACKGROUND_ROOM_ID,
@@ -604,6 +604,9 @@ export class RoomView {
       '--o3d-room-w',
       (spot.width + OFFICE3D_ROOM_GAP * 0.9).toFixed(2),
     );
+    if (spot.background) {
+      this.rosterEl.style.setProperty('--o3d-roster-cols', String(porchRosterColumns(spot.width)));
+    }
     for (const pod of spot.pods) {
       const sign = this.signs.get(pod.id);
       if (!sign) continue;

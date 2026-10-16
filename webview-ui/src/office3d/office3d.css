@@ -372,11 +372,12 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-/* On a wide stage the background strip is wide and shallow, so its list wraps across it.
+/* On a wide stage the porch list runs across the porch, porchRosterColumns names per line.
    planOffice reserves floor for the same number of lines. */
 .o3d-labels[data-narrow='false'][data-density='roster'] .o3d-roster[data-background='true'] {
-  flex-flow: row wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(var(--o3d-roster-cols, 1), minmax(0, 1fr));
+  justify-items: center;
 }
 .o3d-labels[data-narrow='false'] .o3d-roster[data-background='true'] .o3d-roster-item {
   max-inline-size: 11em;

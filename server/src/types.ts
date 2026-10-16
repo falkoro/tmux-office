@@ -5,7 +5,7 @@ import type { TmuxLocation } from './providers/hook/claude/claudeSessionRegistry
 export interface AgentState {
   id: number;
   sessionId: string;
-  /** The session id this agent was moved from by its latest /clear. */
+  /** The session id this agent was moved from by its latest /clear, until the registry shows its new one. */
   clearedFromSessionId?: string;
   /** Terminal reference — undefined for extension panel sessions */
   terminalRef?: vscode.Terminal;

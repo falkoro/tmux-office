@@ -536,6 +536,13 @@ describe('live-only', () => {
     await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
     expect([...planted.store.keys()]).toEqual([agent.id]);
     expect(planted.store.get(agent.id)?.sessionId).toBe(nextSession);
+
+    fs.writeFileSync(
+      planted.sessionFile,
+      JSON.stringify({ pid: process.pid, sessionId: planted.sessionId, cwd: planted.cwd }),
+    );
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(planted.store.get(agent.id)).toBeUndefined();
   });
 
   it('keeps a sub-agent and an inline teammate of a live lead', async () => {

@@ -46,6 +46,7 @@ import type {
 import { EditTool } from '../office/types.js';
 import { TileType } from '../office/types.js';
 import { transport } from '../transport/index.js';
+import { debouncedSave } from './debouncedSave.js';
 
 interface EditorActions {
   isEditMode: boolean;
@@ -53,7 +54,8 @@ interface EditorActions {
   isDirty: boolean;
   zoom: number;
   panRef: React.MutableRefObject<{ x: number; y: number }>;
-  saveTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  /** Send a layout save still waiting out its debounce now. */
+  flushLayoutSave: () => void;
   setLastSavedLayout: (layout: OfficeLayout) => void;
   /** Clear the dirty flag (used after a browser import applies a new saved baseline). */
   markClean: () => void;
@@ -123,7 +125,16 @@ export function useEditorActions(
   const [selectedAreaLabel, setSelectedAreaLabelState] = useState<string | null>(
     editorState.selectedAreaLabel,
   );
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [layoutSave] = useState(() =>
+    debouncedSave<OfficeLayout>(
+      (layout) =>
+        transport.send({
+          type: 'saveLayout',
+          layout: layout as unknown as Record<string, unknown>,
+        }),
+      LAYOUT_SAVE_DEBOUNCE_MS,
+    ),
+  );
   const panRef = useRef({ x: 0, y: 0 });
   const lastSavedLayoutRef = useRef<OfficeLayout | null>(null);
 
@@ -141,12 +152,7 @@ export function useEditorActions(
   }, [editorState]);
 
   // Debounced layout save
-  const saveLayout = useCallback((layout: OfficeLayout) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      transport.send({ type: 'saveLayout', layout: layout as unknown as Record<string, unknown> });
-    }, LAYOUT_SAVE_DEBOUNCE_MS);
-  }, []);
+  const saveLayout = useCallback((layout: OfficeLayout) => layoutSave.save(layout), [layoutSave]);
 
   // Apply a layout edit: push undo, clear redo, rebuild state, save, mark dirty
   const applyEdit = useCallback(
@@ -528,18 +534,15 @@ export function useEditorActions(
   }, [editorState, applyEdit]);
 
   const handleSave = useCallback(() => {
-    // Flush any pending debounced save immediately
-    if (saveTimerRef.current) {
-      clearTimeout(saveTimerRef.current);
-      saveTimerRef.current = null;
-    }
+    // Drop any pending debounced save; the current layout goes out now
+    layoutSave.cancel();
     const os = getOfficeState();
     const layout = os.getLayout();
     lastSavedLayoutRef.current = structuredClone(layout);
     transport.send({ type: 'saveLayout', layout: layout as unknown as Record<string, unknown> });
     editorState.isDirty = false;
     setIsDirty(false);
-  }, [getOfficeState, editorState]);
+  }, [getOfficeState, editorState, layoutSave]);
 
   // Notify React that imperative editor selection changed (e.g., from OfficeCanvas mouseUp)
   const handleEditorSelectionChange = useCallback(() => {
@@ -924,7 +927,7 @@ export function useEditorActions(
     isDirty,
     zoom,
     panRef,
-    saveTimerRef,
+    flushLayoutSave: layoutSave.flush,
     setLastSavedLayout,
     markClean,
     handleOpenClaude,

@@ -409,7 +409,17 @@ export function processTranscriptLine(
         // New user text prompt — new turn starting
         cancelWaitingTimer(agentId, waitingTimers);
         clearAgentActivity(agent, agentId, agents, permissionTimers);
-        if (content.includes('/clear</command-name>')) agent.midTurn = false;
+        if (content.trimStart().startsWith('<local-command-stdout>')) {
+          agent.isWaiting = true;
+          agent.awaitingInput = false;
+          agent.midTurn = false;
+          agents.broadcast({
+            type: 'agentStatus',
+            id: agentId,
+            status: 'waiting',
+            awaitingInput: false,
+          });
+        } else if (content.includes('/clear</command-name>')) agent.midTurn = false;
         else startTurn(agent, agentId, agents);
         agent.hadToolsInTurn = false;
       }

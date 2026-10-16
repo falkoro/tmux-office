@@ -148,6 +148,7 @@ export function useExtensionMessages(
   getOfficeState: () => OfficeState,
   onLayoutLoaded?: (layout: OfficeLayout) => void,
   isEditDirty?: () => boolean,
+  flushLayoutSave?: () => void,
 ): ExtensionMessageState {
   const [agents, setAgents] = useState<number[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
@@ -399,6 +400,7 @@ export function useExtensionMessages(
         });
       } else if (msg.type === 'existingAgents') {
         if (isNewServer(firstServerRef.current, msg.serverId) && isBrowserRuntime) {
+          flushLayoutSave?.();
           window.location.reload();
           return;
         }

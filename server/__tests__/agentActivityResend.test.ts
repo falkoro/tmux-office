@@ -109,6 +109,29 @@ describe('resendAgentActivity', () => {
     expect(replayed).toEqual(live);
   });
 
+  it('ends the turn when a local command prints its output', () => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
+      for (const record of [
+        { type: 'user', message: { content: 'task' } },
+        { type: 'system', subtype: 'turn_duration' },
+        {
+          type: 'user',
+          message: {
+            content: '<command-name>/model</command-name>\n<command-args></command-args>',
+          },
+        },
+        {
+          type: 'user',
+          message: { content: '<local-command-stdout>Set model to Opus</local-command-stdout>' },
+        },
+      ]) {
+        processTranscriptLine(1, JSON.stringify(record), store, new Map(), new Map());
+      }
+    });
+    expect(live).toMatchObject({ status: 'waiting' });
+    expect(replayed).toEqual(live);
+  });
+
   it('replays no active status for an agent moved to its /clear transcript', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-resend-'));
     const pollingTimers = new Map<number, ReturnType<typeof setInterval>>();

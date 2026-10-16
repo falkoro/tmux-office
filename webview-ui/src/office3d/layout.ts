@@ -1,5 +1,5 @@
 import {
-  OFFICE3D_BACKGROUND_ROSTER_PER_LINE,
+  OFFICE3D_BACKGROUND_ROSTER_NAME_W,
   OFFICE3D_BACKGROUND_SCALE,
   OFFICE3D_CREW_PER_ROW,
   OFFICE3D_CREW_SCALE,
@@ -210,47 +210,58 @@ interface RoomShape {
 const EMPTY_INNER_W = OFFICE3D_DESK_PITCH_X + 2 * OFFICE3D_POD_PAD;
 const EMPTY_INNER_D = OFFICE3D_DESK_PITCH_Z * 0.6;
 
+/** Names per line of the porch's name list on a wide viewport; office3d.css lays it out in as many columns. */
+export function porchRosterColumns(width: number): number {
+  return Math.max(1, Math.floor(width / OFFICE3D_BACKGROUND_ROSTER_NAME_W));
+}
+
 /**
- * Pack a room's pods into rows, trying every row width the pods allow and
- * keeping the one whose on-screen shape is closest to `target` (width/height).
+ * Every row packing of a room's pods, from the narrowest the pods and
+ * `minWidth` allow up to one row.
  */
-function shapeRoom(room: RoomModel, target: number, narrow: boolean, scale: number): RoomShape {
+function roomShapes(room: RoomModel, narrow: boolean, scale: number, minWidth = 0): RoomShape[] {
   const boxes = room.pods.map((pod) => podBox(pod, scale));
   const desks = roomDesks(room).length;
-  const roster = narrow
-    ? Math.ceil(desks / OFFICE3D_NARROW_ROSTER_COLUMNS) * OFFICE3D_ROSTER_LINE_DEPTH
-    : scale < 1
-      ? Math.ceil(desks / OFFICE3D_BACKGROUND_ROSTER_PER_LINE) * OFFICE3D_ROSTER_LINE_DEPTH
-      : 0;
-  const front = OFFICE3D_ROOM_PAD_FRONT + roster;
+  const front = (width: number) =>
+    OFFICE3D_ROOM_PAD_FRONT +
+    (narrow
+      ? Math.ceil(desks / OFFICE3D_NARROW_ROSTER_COLUMNS)
+      : scale < 1
+        ? Math.ceil(desks / porchRosterColumns(width))
+        : 0) *
+      OFFICE3D_ROSTER_LINE_DEPTH;
   const padBack = OFFICE3D_ROOM_PAD_BACK * scale;
   if (boxes.length === 0) {
-    return {
-      room,
-      rows: [],
-      width: EMPTY_INNER_W + 2 * OFFICE3D_ROOM_PAD_X,
-      inner: padBack + EMPTY_INNER_D,
-      front,
-      scale,
-    };
+    const width = Math.max(minWidth, EMPTY_INNER_W + 2 * OFFICE3D_ROOM_PAD_X);
+    return [{ room, rows: [], width, inner: padBack + EMPTY_INNER_D, front: front(width), scale }];
   }
-  const widest = Math.max(...boxes.map((b) => b.width));
-  const candidates = new Set<number>([widest]);
+  const narrowest = Math.max(...boxes.map((b) => b.width), minWidth - 2 * OFFICE3D_ROOM_PAD_X);
+  const candidates = new Set<number>([narrowest]);
   let sum = 0;
   for (const box of boxes) {
     sum += (sum > 0 ? OFFICE3D_POD_GAP : 0) + box.width;
-    candidates.add(Math.max(widest, sum));
+    candidates.add(Math.max(narrowest, sum));
   }
+  return [...candidates]
+    .sort((a, b) => a - b)
+    .map((maxWidth) => {
+      const rows = packRows(boxes, maxWidth);
+      const width = Math.max(minWidth, Math.max(...rows.map(rowWidth)) + 2 * OFFICE3D_ROOM_PAD_X);
+      return { room, rows, width, inner: padBack + rowsDepth(rows), front: front(width), scale };
+    });
+}
+
+/** The row packing whose on-screen shape is closest to `target` (width/height). */
+function shapeRoom(room: RoomModel, target: number, narrow: boolean, scale: number): RoomShape {
   let best: RoomShape | null = null;
   let bestScore = Infinity;
-  for (const maxWidth of [...candidates].sort((a, b) => a - b)) {
-    const rows = packRows(boxes, maxWidth);
-    const width = Math.max(...rows.map(rowWidth)) + 2 * OFFICE3D_ROOM_PAD_X;
-    const inner = padBack + rowsDepth(rows);
-    const shape = Math.log(width / ((inner + front) * OFFICE3D_DEPTH_FORESHORTEN) / target);
-    if (Math.abs(shape) < bestScore - 1e-9) {
-      bestScore = Math.abs(shape);
-      best = { room, rows, width, inner, front, scale };
+  for (const shape of roomShapes(room, narrow, scale)) {
+    const score = Math.abs(
+      Math.log(shape.width / ((shape.inner + shape.front) * OFFICE3D_DEPTH_FORESHORTEN) / target),
+    );
+    if (score < bestScore - 1e-9) {
+      bestScore = score;
+      best = shape;
     }
   }
   return best as RoomShape;
@@ -301,7 +312,8 @@ const ROOM_TARGETS = [0.5, 0.7, 0.9, 1.2, 1.6, 2.1, 2.8];
  * line, with a short last row centred. The planner tries every column count and
  * a few room shapes and keeps the one that lets the whole office fill the most of
  * a viewport with the given width/height `aspect`. The background is a porch
- * behind the grid, as wide as it, with smaller desks and a wrapped name list. On
+ * behind the grid, at least as wide as it, with smaller desks and a wrapped name
+ * list; its pods take the row width that fills the viewport best. On
  * a narrow viewport rooms are too small on screen for per-desk labels, so each
  * room gets extra floor at the front for a list of its agents.
  */
@@ -327,30 +339,25 @@ export function planOffice(rooms: RoomModel[], aspect: number): OfficePlan {
     };
   };
 
-  const bgShape = (width: number): RoomShape | null => {
-    if (!background) return null;
-    const shape = shapeRoom(background, 1e6, narrow, OFFICE3D_BACKGROUND_SCALE);
-    // As wide as the grid: re-pack the pods into that width.
-    const boxes = shape.rows.flat();
-    if (boxes.length === 0) return { ...shape, width: Math.max(width, shape.width) };
-    const widest = Math.max(...boxes.map((b) => b.width)) + 2 * OFFICE3D_ROOM_PAD_X;
-    const rows = packRows(boxes, Math.max(width, widest) - 2 * OFFICE3D_ROOM_PAD_X);
-    return {
-      ...shape,
-      rows,
-      width: Math.max(width, Math.max(...rows.map(rowWidth)) + 2 * OFFICE3D_ROOM_PAD_X),
-      inner: OFFICE3D_ROOM_PAD_BACK * OFFICE3D_BACKGROUND_SCALE + rowsDepth(rows),
-    };
-  };
-
-  const measure = (shapes: RoomShape[], columns: number) => {
-    const g = layoutRows(shapes, columns);
-    const bg = bgShape(g.width);
+  const fit = (g: ReturnType<typeof layoutRows>, bg: RoomShape | null, columns: number) => {
     const bgDepth = bg ? bg.inner + bg.front : 0;
     const width = Math.max(g.width, bg?.width ?? 0);
     const depth = g.depth + (bg ? bgDepth + (n > 0 ? OFFICE3D_ROOM_GAP : 0) : 0);
     const scale = Math.min(aspect / width, 1 / (depth * OFFICE3D_DEPTH_FORESHORTEN));
     return { columns, g, bg, bgDepth, width, depth, scale };
+  };
+
+  const measure = (shapes: RoomShape[], columns: number) => {
+    const g = layoutRows(shapes, columns);
+    const porches = background
+      ? roomShapes(background, narrow, OFFICE3D_BACKGROUND_SCALE, g.width)
+      : [null];
+    let best: ReturnType<typeof fit> | null = null;
+    for (const bg of porches) {
+      const m = fit(g, bg, columns);
+      if (!best || m.scale > best.scale + 1e-9) best = m;
+    }
+    return best!;
   };
 
   let best = measure([], 1);

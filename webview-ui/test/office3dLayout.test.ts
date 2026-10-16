@@ -2,9 +2,13 @@ import assert from 'node:assert/strict';
 
 import { describe, test } from 'vitest';
 
-import { OFFICE3D_CREW_SCALE, OFFICE3D_ROSTER_LINE_DEPTH } from '../src/constants.js';
+import {
+  OFFICE3D_CREW_SCALE,
+  OFFICE3D_DEPTH_FORESHORTEN,
+  OFFICE3D_ROSTER_LINE_DEPTH,
+} from '../src/constants.js';
 import type { OfficePlan, RoomSpot } from '../src/office3d/layout.js';
-import { fitKey, planOffice } from '../src/office3d/layout.js';
+import { fitKey, planOffice, porchRosterColumns } from '../src/office3d/layout.js';
 import type { DeskModel, PodModel, RoomModel } from '../src/office3d/model.js';
 import { BACKGROUND_ROOM_ID, NO_PANE_POD_ID } from '../src/office3d/model.js';
 
@@ -282,16 +286,28 @@ describe('planOffice', () => {
     assert.ok(frontFloor(11) - frontFloor(1) > OFFICE3D_ROSTER_LINE_DEPTH / 2);
   });
 
-  test('a porch of many pods wraps to the width of the rooms', () => {
+  test('a porch of many pods behind one small room widens instead of stacking', () => {
     const porchPods = Array.from({ length: 6 }, (_, i) => pod(`other-${i}`, 1));
     const plan = planOffice(
       [room('work', pod('work-1', 1)), room(BACKGROUND_ROOM_ID, ...porchPods)],
       DESKTOP,
     );
-    assertSound(plan, 'wrapped porch');
+    assertSound(plan, 'wide porch');
     const [work, porch] = plan.rooms;
-    assert.ok(porch.width <= work.width + 1e-9);
-    assert.ok(new Set(porch.pods.map((p) => p.z)).size > 1);
+    assert.ok(porch.width > work.width);
+    assert.ok(plan.width >= plan.depth * OFFICE3D_DEPTH_FORESHORTEN, 'not a strip on a wide view');
+  });
+
+  test('the porch reserves floor for its name list at the columns its width holds', () => {
+    const porchPods = Array.from({ length: 6 }, (_, i) => pod(`other-${i}`, 1));
+    const plan = planOffice(
+      [room('work', pod('work-1', 1)), room(BACKGROUND_ROOM_ID, ...porchPods)],
+      DESKTOP,
+    );
+    const porch = plan.rooms[1];
+    const lines = Math.ceil(porch.desks.length / porchRosterColumns(porch.width));
+    const floor = porch.z + porch.depth / 2 - Math.max(...porch.desks.map((d) => d.z));
+    assert.ok(floor >= lines * OFFICE3D_ROSTER_LINE_DEPTH);
   });
 
   test('the porch alone sits at the origin', () => {

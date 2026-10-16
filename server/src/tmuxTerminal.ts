@@ -217,6 +217,17 @@ export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
   }
 }
 
+/**
+ * Where a pane is now. Pane ids are unique per server, but a stored location
+ * can predate a window move. Prefers the stored session when it still holds
+ * the pane; throwaway sessions are never picked.
+ */
+export async function resolvePaneLocation(location: TmuxLocation): Promise<TmuxLocation | null> {
+  const panes = (await listTmuxPanes())?.filter((p) => p.paneId === location.paneId) ?? [];
+  const pane = panes.find((p) => p.session === location.session) ?? panes[0];
+  return pane ? { session: pane.session, windowId: pane.windowId, paneId: pane.paneId } : null;
+}
+
 export async function killThrowawaySession(sessionName: string): Promise<void> {
   if (!THROWAWAY_SESSION.test(sessionName)) return;
   try {
@@ -252,12 +263,16 @@ export interface AttachedTerminal {
 }
 
 export async function attachTmuxPane(
-  location: TmuxLocation,
+  stored: TmuxLocation,
   onData: (data: string) => void,
   onSize: (cols: number, rows: number) => void,
 ): Promise<AttachedTerminal> {
-  if (!isSafeTmuxLocation(location)) {
+  if (!isSafeTmuxLocation(stored)) {
     throw new Error('unsafe tmux location');
+  }
+  const location = await resolvePaneLocation(stored);
+  if (!location || !isSafeTmuxLocation(location)) {
+    throw new Error('tmux pane not found');
   }
   const sessionName = throwawaySessionName();
   const size = (await readPaneClientSize(location.paneId)) ?? {

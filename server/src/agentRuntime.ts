@@ -572,7 +572,8 @@ export class AgentRuntime {
    * Drop top-level agents whose session is no longer in the registry.
    * Children stay while their lead stays, and leave with the lead. A child
    * whose lead is gone is judged by its own session. An agent moved by /clear
-   * stays while the registry still shows the session it was moved from.
+   * stays while the registry still shows the session it was moved from, until
+   * the registry has shown its new one.
    * The transcript is not dismissed: a new pid with the same session id
    * must be adopted on a later tick.
    */

@@ -108,7 +108,12 @@ function App() {
     agentTerminals,
     snapshots,
     officeRooms,
-  } = useExtensionMessages(getOfficeState, editor.setLastSavedLayout, isEditDirty);
+  } = useExtensionMessages(
+    getOfficeState,
+    editor.setLastSavedLayout,
+    isEditDirty,
+    editor.flushLayoutSave,
+  );
 
   const [openTerminalId, setOpenTerminalId] = useState<number | null>(null);
 

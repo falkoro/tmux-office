@@ -119,6 +119,8 @@ To open the office on other devices, put it behind [Cloudflare Access](https://d
 
 If only one of them is set, the server refuses to start and names the missing one, so a typo cannot leave the office open. With both set, it logs that the gate is on and checks the `Cf-Access-Jwt-Assertion` header on every request except hook posts. A request without a valid token gets `403`. The terminal panel opens only in this mode or with `--insecure-local-terminal`, and only for a page on the same origin. Without Access, the terminal also needs the server token.
 
+Behind Access, a browser page on another origin cannot read `/api/office`, even when `PIXEL_AGENTS_OFFICE_EMBED_ORIGINS` lists it: the request needs the Access cookie, and the server does not allow credentialed cross-origin requests. Read the feed from a server, for example with an Access service token, or from a page on the office's own host.
+
 ## What tmux office adds to Pixel Agents
 
 - A three.js office in the browser. The VS Code extension and the e2e suite keep the pixel view.

@@ -362,8 +362,8 @@ export const OFFICE3D_ROSTER_LINE_DEPTH = 1.1;
 export const OFFICE3D_NARROW_ROSTER_COLUMNS = 2;
 /** Desk size on the porch behind the rooms, relative to a room desk. */
 export const OFFICE3D_BACKGROUND_SCALE = 0.65;
-/** Porch names per roster line on wide viewports, where that list wraps across the porch. */
-export const OFFICE3D_BACKGROUND_ROSTER_PER_LINE = 5;
+/** Porch width per name of its roster line on wide viewports, where that list runs across the porch (m). */
+export const OFFICE3D_BACKGROUND_ROSTER_NAME_W = 5;
 /** Helpers per row in front of their parent's desk label. */
 export const OFFICE3D_HELPERS_PER_ROW = 5;
 /** Default camera tilt from straight down, wide and narrow viewports (radians). */
