@@ -702,6 +702,7 @@ export function scanForTeammateFiles(
       existingTeammate.lastDataAt = Date.now();
       existingTeammate.linesProcessed = 0;
       existingTeammate.isWaiting = false;
+      existingTeammate.awaitingInput = false;
       existingTeammate.teamUsesTmux = parentAgent?.teamUsesTmux;
       if (ownSessionId && existingTeammate.sessionId !== ownSessionId) {
         existingTeammate.sessionId = ownSessionId;

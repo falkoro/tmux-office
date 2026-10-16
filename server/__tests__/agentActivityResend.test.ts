@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { resendAgentActivity } from '../src/agentActivityResend.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
+import { HookEventHandler } from '../src/hookEventHandler.js';
+import { claudeProvider } from '../src/providers/hook/claude/claude.js';
+import { SessionRouter } from '../src/sessionRouter.js';
+import { processTranscriptLine } from '../src/transcriptParser.js';
 import type { AgentState } from '../src/types.js';
 
 function createTestAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -32,7 +36,50 @@ function createTestAgent(overrides: Partial<AgentState> = {}): AgentState {
   } as AgentState;
 }
 
+/** The last agentStatus a client saw live, and the one a reconnecting client is replayed. */
+function liveAndReplayedStatus(drive: (store: AgentStateStore) => void) {
+  const store = new AgentStateStore();
+  store.set(1, createTestAgent({ id: 1 }));
+  const live: Array<Record<string, unknown>> = [];
+  store.on('broadcast', (msg) => live.push(msg));
+  drive(store);
+  const replayed: Array<Record<string, unknown>> = [];
+  resendAgentActivity((msg) => replayed.push(msg), store);
+  const lastStatus = (msgs: Array<Record<string, unknown>>) =>
+    msgs.filter((m) => m.type === 'agentStatus').at(-1);
+  return { live: lastStatus(live), replayed: lastStatus(replayed) };
+}
+
 describe('resendAgentActivity', () => {
+  it('replays an agent waiting for input as waiting for input, not done', () => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
+      const handler = new HookEventHandler(
+        store,
+        new Map(),
+        new Map(),
+        claudeProvider,
+        new SessionRouter(),
+      );
+      handler.registerAgent('sess-1', 1);
+      handler.handleEvent('claude', {
+        hook_event_name: 'Notification',
+        session_id: 'sess-1',
+        notification_type: 'idle_prompt',
+      });
+    });
+    expect(live).toMatchObject({ status: 'waiting', awaitingInput: true });
+    expect(replayed).toEqual(live);
+  });
+
+  it('replays an agent mid-turn with no open tool as active', () => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
+      const line = JSON.stringify({ type: 'user', message: { content: 'next task' } });
+      processTranscriptLine(1, line, store, new Map(), new Map());
+    });
+    expect(live).toEqual({ type: 'agentStatus', id: 1, status: 'active' });
+    expect(replayed).toEqual(live);
+  });
+
   it('sends messages in order: team info, tools, waiting, context', () => {
     const store = new AgentStateStore();
     store.set(
@@ -182,7 +229,7 @@ describe('resendAgentActivity', () => {
     store.set(1, createTestAgent({ id: 1, isWaiting: true }));
     let sent: Array<Record<string, unknown>> = [];
     resendAgentActivity((msg) => sent.push(msg), store);
-    expect(sent).toEqual([{ type: 'agentStatus', id: 1, status: 'waiting' }]);
+    expect(sent).toEqual([{ type: 'agentStatus', id: 1, status: 'waiting', awaitingInput: false }]);
 
     store = new AgentStateStore();
     store.set(2, createTestAgent({ id: 2, isWaiting: false }));

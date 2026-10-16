@@ -20,6 +20,10 @@ export interface AgentState {
   activeSubagentToolNames: Map<string, Map<string, string>>; // parentToolId → (subToolId → toolName)
   backgroundAgentToolIds: Set<string>; // tool IDs for run_in_background Agent calls (stay alive until queue-operation)
   isWaiting: boolean;
+  /** The last waiting status said the agent is waiting for input, not done. */
+  awaitingInput?: boolean;
+  /** Marked active since the last waiting status; replayed to a reconnecting client. */
+  midTurn?: boolean;
   permissionSent: boolean;
   hadToolsInTurn: boolean;
   /** Workspace folder name (only set for multi-root workspaces) */

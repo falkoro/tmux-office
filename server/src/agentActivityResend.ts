@@ -9,7 +9,7 @@ import { hasPromotedBackgroundAgent } from './teamUtils.js';
  * 2. Regular tools
  * 3. Background tools with runInBackground + isTeammateSpawn flags, skipping promoted spawns
  * 4. Permission wait, after the tools it marks
- * 5. Waiting status
+ * 5. Waiting status, or active for an agent mid-turn
  * 6. Context usage
  */
 export function resendAgentActivity(
@@ -78,7 +78,10 @@ export function resendAgentActivity(
         type: 'agentStatus',
         id,
         status: 'waiting',
+        awaitingInput: agent.awaitingInput === true,
       });
+    } else if (agent.midTurn) {
+      send({ type: 'agentStatus', id, status: 'active' });
     }
 
     // 6. Context usage
