@@ -81,4 +81,35 @@ describe('/ws/term input during attach', () => {
     socket.send(Buffer.from('b'));
     expect(await closed).toBe(1009);
   });
+
+  it('types a paste over 64 KiB into a terminal tmux already draws', async () => {
+    const { port } = await ready;
+    finishAttach = null;
+    written.length = 0;
+    const socket = new WebSocket(`ws://127.0.0.1:${port}/ws/term?agentId=1&token=test-token`);
+    await new Promise<void>((resolve, reject) => {
+      socket.once('open', () => resolve());
+      socket.once('error', reject);
+    });
+    await vi.waitFor(() => expect(finishAttach).not.toBeNull());
+    finishAttach!({
+      pty: {
+        write: (data: Buffer | string) => written.push(data.toString()),
+        onExit: () => undefined,
+      },
+      sessionName: 'pa-web-test',
+      stop: () => undefined,
+    } as unknown as AttachedTerminal);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    paneOutput!('$ ');
+    let closeCode: number | null = null;
+    socket.once('close', (code) => (closeCode = code));
+
+    const paste = 'p'.repeat(100 * 1024);
+    socket.send(Buffer.from(paste));
+
+    await vi.waitFor(() => expect(written.join('')).toBe(paste));
+    expect(closeCode).toBeNull();
+    socket.close();
+  });
 });
