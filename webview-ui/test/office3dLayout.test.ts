@@ -5,6 +5,7 @@ import { describe, test } from 'vitest';
 import {
   OFFICE3D_CREW_SCALE,
   OFFICE3D_DEPTH_FORESHORTEN,
+  OFFICE3D_ROOM_PAD_FRONT,
   OFFICE3D_ROSTER_LINE_DEPTH,
 } from '../src/constants.js';
 import type { OfficePlan, RoomSpot } from '../src/office3d/layout.js';
@@ -216,19 +217,31 @@ describe('planOffice', () => {
     assert.ok(Math.abs(left + right) < 1e-9);
   });
 
-  test('every room reserves floor in front of its pods for the lines of its name list', () => {
-    // office3d.css lays the list out two names per line on a phone, porchRosterColumns on a wide stage.
-    for (const [aspect, perLine] of [
-      [PHONE, () => 2],
-      [DESKTOP, porchRosterColumns],
-      [1366 / 768, porchRosterColumns],
+  const frontFloor = (r: RoomSpot) =>
+    r.z + r.depth / 2 - Math.max(...r.pods.map((p) => p.z + p.depth / 2));
+
+  test('a room shown as a name list reserves floor in front of its pods for its lines', () => {
+    // office3d.css lays the list out two names per line on a phone, porchRosterColumns on a
+    // wide stage, where the plaques hanging from the pods take one more line of that floor.
+    for (const [aspect, perLine, plaques] of [
+      [PHONE, () => 2, 0],
+      [DESKTOP, porchRosterColumns, 1],
+      [1366 / 768, porchRosterColumns, 1],
     ] as const) {
-      for (const r of planOffice(demo(), aspect).rooms) {
-        const lines = Math.ceil(r.desks.length / perLine(r.width));
-        const podsFront = Math.max(...r.pods.map((p) => p.z + p.depth / 2));
-        const floor = r.z + r.depth / 2 - podsFront;
-        assert.ok(floor >= lines * OFFICE3D_ROSTER_LINE_DEPTH - 1e-9, `${r.id} at ${aspect}`);
+      for (const r of planOffice(demo(), aspect, true).rooms) {
+        const lines = Math.ceil(r.desks.length / perLine(r.width)) + plaques;
+        assert.ok(
+          frontFloor(r) >= lines * OFFICE3D_ROSTER_LINE_DEPTH - 1e-9,
+          `${r.id} at ${aspect}`,
+        );
       }
+    }
+  });
+
+  test('a wide overview that shows desk labels keeps only the walkway in front of the rooms', () => {
+    for (const r of planOffice(demo(), DESKTOP).rooms) {
+      if (r.background) continue;
+      assert.ok(Math.abs(frontFloor(r) - OFFICE3D_ROOM_PAD_FRONT) < 1e-9, r.id);
     }
   });
 

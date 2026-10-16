@@ -219,13 +219,26 @@ export function porchRosterColumns(width: number): number {
  * Every row packing of a room's pods, from the narrowest the pods and
  * `minWidth` allow up to one row.
  */
-function roomShapes(room: RoomModel, narrow: boolean, scale: number, minWidth = 0): RoomShape[] {
+function roomShapes(
+  room: RoomModel,
+  narrow: boolean,
+  roster: boolean,
+  scale: number,
+  minWidth = 0,
+): RoomShape[] {
   const boxes = room.pods.map((pod) => podBox(pod, scale));
   const desks = roomDesks(room).length;
+  // A wide roster also needs a line for the plaques that hang into the same floor.
+  const lines = (width: number) =>
+    narrow
+      ? Math.ceil(desks / OFFICE3D_NARROW_ROSTER_COLUMNS)
+      : roster
+        ? Math.ceil(desks / porchRosterColumns(width)) + 1
+        : scale < 1
+          ? Math.ceil(desks / porchRosterColumns(width))
+          : 0;
   const front = (width: number) =>
-    OFFICE3D_ROOM_PAD_FRONT +
-    Math.ceil(desks / (narrow ? OFFICE3D_NARROW_ROSTER_COLUMNS : porchRosterColumns(width))) *
-      OFFICE3D_ROSTER_LINE_DEPTH;
+    OFFICE3D_ROOM_PAD_FRONT + lines(width) * OFFICE3D_ROSTER_LINE_DEPTH;
   const padBack = OFFICE3D_ROOM_PAD_BACK * scale;
   if (boxes.length === 0) {
     const width = Math.max(minWidth, EMPTY_INNER_W + 2 * OFFICE3D_ROOM_PAD_X);
@@ -248,10 +261,16 @@ function roomShapes(room: RoomModel, narrow: boolean, scale: number, minWidth = 
 }
 
 /** The row packing whose on-screen shape is closest to `target` (width/height). */
-function shapeRoom(room: RoomModel, target: number, narrow: boolean, scale: number): RoomShape {
+function shapeRoom(
+  room: RoomModel,
+  target: number,
+  narrow: boolean,
+  roster: boolean,
+  scale: number,
+): RoomShape {
   let best: RoomShape | null = null;
   let bestScore = Infinity;
-  for (const shape of roomShapes(room, narrow, scale)) {
+  for (const shape of roomShapes(room, narrow, roster, scale)) {
     const score = Math.abs(
       Math.log(shape.width / ((shape.inner + shape.front) * OFFICE3D_DEPTH_FORESHORTEN) / target),
     );
@@ -311,9 +330,10 @@ const ROOM_TARGETS = [0.5, 0.7, 0.9, 1.2, 1.6, 2.1, 2.8];
  * behind the grid, at least as wide as it, with smaller desks and a wrapped name
  * list; its pods take the row width that fills the viewport best. When rooms
  * are too small on screen for per-desk labels they list their agents instead,
- * so each room gets extra floor at the front for that list.
+ * so each room gets extra floor at the front for that list: always on a narrow
+ * viewport, and on a wide one when `roster` says the overview shows the lists.
  */
-export function planOffice(rooms: RoomModel[], aspect: number): OfficePlan {
+export function planOffice(rooms: RoomModel[], aspect: number, roster = false): OfficePlan {
   const narrow = aspect < OFFICE3D_NARROW_ASPECT;
   const grid = rooms.filter((r) => r.id !== BACKGROUND_ROOM_ID);
   const background = rooms.find((r) => r.id === BACKGROUND_ROOM_ID);
@@ -346,7 +366,7 @@ export function planOffice(rooms: RoomModel[], aspect: number): OfficePlan {
   const measure = (shapes: RoomShape[], columns: number) => {
     const g = layoutRows(shapes, columns);
     const porches = background
-      ? roomShapes(background, narrow, OFFICE3D_BACKGROUND_SCALE, g.width)
+      ? roomShapes(background, narrow, roster, OFFICE3D_BACKGROUND_SCALE, g.width)
       : [null];
     let best: ReturnType<typeof fit> | null = null;
     for (const bg of porches) {
@@ -359,7 +379,7 @@ export function planOffice(rooms: RoomModel[], aspect: number): OfficePlan {
   let best = measure([], 1);
   best.scale = -1;
   for (const target of ROOM_TARGETS) {
-    const shapes = grid.map((room) => shapeRoom(room, target, narrow, 1));
+    const shapes = grid.map((room) => shapeRoom(room, target, narrow, roster, 1));
     for (let c = 1; c <= Math.max(1, n); c++) {
       const m = measure(shapes, c);
       if (m.scale > best.scale + 1e-9) best = m;

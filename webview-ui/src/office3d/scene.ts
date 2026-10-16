@@ -1270,7 +1270,7 @@ export class OfficeScene {
   /** Label size, density and fog follow the zoom. */
   private syncCameraDependents(): void {
     const dist = Math.max(0.5, this.camera.position.distanceTo(this.controls.target));
-    const ppm = this.height / (2 * dist * Math.tan(MathUtils.degToRad(this.camera.fov / 2)));
+    const ppm = this.ppmAt(dist);
     const pitch = ppm * OFFICE3D_DESK_PITCH_X;
     // holdOrbit covers the glide back up: the camera is still low after walking turns off.
     const eyeLevel = this.walking || this.holdOrbit;
@@ -1296,9 +1296,19 @@ export class OfficeScene {
     this.fog.far = dist * 4;
   }
 
+  /** Screen pixels per metre at the target with the camera `dist` away. */
+  private ppmAt(dist: number): number {
+    return this.height / (2 * dist * Math.tan(MathUtils.degToRad(this.camera.fov / 2)));
+  }
+
   private layout(): void {
     const animate = this.planKey !== '';
     this.plan = planOffice(this.snapshot.rooms, this.camera.aspect);
+    // Reserve floor for the room lists when the overview is far enough out to show them.
+    const overview = this.fitView(focusArea(this.plan, null)).orbit.radius;
+    if (this.ppmAt(overview) * OFFICE3D_DESK_PITCH_X < OFFICE3D_COMPACT_LABEL_PX) {
+      this.plan = planOffice(this.snapshot.rooms, this.camera.aspect, true);
+    }
     this.labels.domElement.dataset.narrow = String(this.plan.narrow);
     for (const spot of this.plan.rooms) {
       this.rooms.get(spot.id)?.place(spot);
