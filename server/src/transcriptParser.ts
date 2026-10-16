@@ -28,6 +28,19 @@ function exemptTools(): ReadonlySet<string> {
 }
 
 /** Whether the given tool name spawns a sub-agent according to the active provider. */
+const COMMAND_OUTPUT = /^\s*<(bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>/;
+const COMMAND_INPUT = /^\s*<bash-input>/;
+
+/**
+ * A user record for a command the CLI runs itself, with no model turn: its
+ * input (/clear, bash mode) starts no turn, and its output ends one.
+ */
+function localCommandRecord(content: string): 'input' | 'output' | null {
+  if (COMMAND_OUTPUT.test(content)) return 'output';
+  if (COMMAND_INPUT.test(content) || content.includes('/clear</command-name>')) return 'input';
+  return null;
+}
+
 function isSubagentTool(toolName: string | null | undefined): boolean {
   if (!toolName || !hookProvider) return false;
   return hookProvider.subagentToolNames.has(toolName);
@@ -409,7 +422,8 @@ export function processTranscriptLine(
         // New user text prompt — new turn starting
         cancelWaitingTimer(agentId, waitingTimers);
         clearAgentActivity(agent, agentId, agents, permissionTimers);
-        if (content.trimStart().startsWith('<local-command-stdout>')) {
+        const local = localCommandRecord(content);
+        if (local === 'output') {
           agent.isWaiting = true;
           agent.awaitingInput = false;
           agent.midTurn = false;
@@ -419,7 +433,7 @@ export function processTranscriptLine(
             status: 'waiting',
             awaitingInput: false,
           });
-        } else if (content.includes('/clear</command-name>')) agent.midTurn = false;
+        } else if (local === 'input') agent.midTurn = false;
         else startTurn(agent, agentId, agents);
         agent.hadToolsInTurn = false;
       }
