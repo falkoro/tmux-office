@@ -6,12 +6,13 @@
 #
 #   scripts/office-demo-rig.sh start [name] [port]   prints the office URL
 #   scripts/office-demo-rig.sh stop  [name]
-set -euo pipefail
+set -Eeuo pipefail
 
 cmd="${1:-}"
 name="${2:-demo}"
 port="${3:-3199}"
 [[ "$name" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "name must match [A-Za-z0-9_-]+" >&2; exit 2; }
+[[ "$port" =~ ^[0-9]+$ ]] || { echo "port must be digits" >&2; exit 2; }
 sock="pa-demo-${name}"
 dir="${TMPDIR:-/tmp}/pa-demo-${name}"
 root="${PA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
@@ -74,6 +75,7 @@ input_for() {
 start_rig() {
   [[ -f "$root/dist/cli.js" ]] || { echo "build first: npm run build" >&2; exit 1; }
   stop_rig
+  trap stop_rig ERR
   mkdir -p "$dir/home" "$dir/panes"
 
   local i=0 spec session window cfg state cols rows sid cwd proj file pid loc
@@ -112,28 +114,30 @@ start_rig() {
     fi
     i=$((i + 1))
   done
+  trap - ERR
 
   (HOME="$dir/home" PIXEL_AGENTS_TMUX_SOCKET="$sock" \
     PIXEL_AGENTS_OFFICE_ROOMS="${PIXEL_AGENTS_OFFICE_ROOMS-work=work-*}" \
     PIXEL_AGENTS_OFFICE_PINNED="${PIXEL_AGENTS_OFFICE_PINNED-work-8}" nohup node "$root/dist/cli.js" \
     --port "$port" --host 127.0.0.1 --watch-all --live-only --insecure-local-terminal > "$dir/server.log" 2>&1 &
     echo $! > "$dir/server.pid")
+  local url=""
   for _ in $(seq 1 40); do
-    grep -q "http://127.0.0.1:$port/?token=" "$dir/server.log" 2>/dev/null && break
+    url="$(grep -o "http://127.0.0.1:$port/?token=[^ ]*" "$dir/server.log" 2>/dev/null | head -1 || true)"
+    [[ -n "$url" ]] && break
+    kill -0 "$(cat "$dir/server.pid")" 2>/dev/null || break
     sleep 0.25
   done
-  sleep 6
-  seed_states
-  animate > /dev/null 2>&1 &
-  echo $! > "$dir/animate.pid"
-  local url
-  url="$(grep -o "http://127.0.0.1:$port/?token=[^ ]*" "$dir/server.log" | head -1 || true)"
   if [[ -z "$url" ]]; then
     echo "the server did not start:" >&2
     tail -n 20 "$dir/server.log" >&2 || true
     stop_rig
     exit 1
   fi
+  sleep 6
+  seed_states
+  animate > /dev/null 2>&1 &
+  echo $! > "$dir/animate.pid"
   printf '%s\n' "$url"
 }
 

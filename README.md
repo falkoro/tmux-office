@@ -26,7 +26,7 @@ tmux office is built on [Pixel Agents](https://github.com/pixel-agents-hq/pixel-
 
 ## Run it
 
-You need Node 20 or later, tmux, and Claude Code running inside tmux.
+You need Node 20.19+ or 22.12+, tmux, and Claude Code running inside tmux.
 
 The terminal panel needs node-pty, which npm may have to build with a C/C++ toolchain. The office works without it.
 

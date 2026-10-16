@@ -51,12 +51,14 @@ function fakeElement() {
   };
 }
 
+let reducedMotion = true;
+
 describe('OfficeScene pointer gestures', () => {
   beforeAll(() => {
     vi.stubGlobal('window', {
       devicePixelRatio: 1,
       location: { hash: '', search: '' },
-      matchMedia: () => ({ matches: true, addEventListener: () => undefined }),
+      matchMedia: () => ({ matches: reducedMotion, addEventListener: () => undefined }),
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     });
@@ -109,5 +111,30 @@ describe('OfficeScene pointer gestures', () => {
     fire('pointerup', 2, 500);
 
     expect(picks).toEqual([]);
+  });
+
+  test('a wheel turn while leaving walk mode lets the glide back up finish', async () => {
+    reducedMotion = false;
+    try {
+      const { OfficeScene } = await import('../src/office3d/scene.js');
+      const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+        onPick: () => undefined,
+        onFocus: () => undefined,
+        onWalk: () => undefined,
+      });
+      const inner = scene as unknown as {
+        tween: unknown;
+        renderer: { domElement: ReturnType<typeof fakeElement> };
+      };
+      scene.toggleWalk();
+      scene.toggleWalk();
+      expect(inner.tween).not.toBeNull();
+
+      inner.renderer.domElement.handlers.get('wheel')!({});
+
+      expect(inner.tween).not.toBeNull();
+    } finally {
+      reducedMotion = true;
+    }
   });
 });

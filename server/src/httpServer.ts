@@ -452,6 +452,14 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
     };
     socket.on('close', detach);
     socket.on('error', detach);
+    const pending: Buffer[] = [];
+    socket.on('message', (data: unknown, isBinary: boolean) => {
+      if (!isBinary || stopped) return;
+      const bytes = toBuffer(data);
+      if (bytes.length === 0) return;
+      if (attached) attached.pty.write(bytes);
+      else pending.push(bytes);
+    });
 
     void attachTmuxPane(
       location,
@@ -469,12 +477,7 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
         }
         attached = term;
         term.pty.onExit(() => socket.close());
-        socket.on('message', (data: unknown, isBinary: boolean) => {
-          if (!isBinary || stopped) return;
-          const bytes = toBuffer(data);
-          if (bytes.length === 0) return;
-          term.pty.write(bytes);
-        });
+        for (const bytes of pending.splice(0)) term.pty.write(bytes);
       })
       .catch((err: unknown) => {
         console.error(

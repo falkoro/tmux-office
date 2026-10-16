@@ -289,7 +289,7 @@ interface HelperView {
 }
 
 /** A desk's character, helpers, label and badge. The desk itself is furniture. */
-class DeskView {
+export class DeskView {
   readonly group = new Group();
   readonly hit = new Box3();
   readonly agentId: number;
@@ -386,11 +386,12 @@ class DeskView {
     camera.getWorldDirection(V2);
     const depth = V.setFromMatrixPosition(this.group.matrixWorld).sub(camera.position).dot(V2);
     // Behind the camera, CSS2D projects the card onto the view and it covers the picture.
-    if (depth <= 0 || screened?.(this.card.getWorldPosition(V), this.hit)) {
-      this.el.style.visibility = 'hidden';
-      return;
+    const hidden = depth <= 0 || !!screened?.(this.card.getWorldPosition(V), this.hit);
+    const visibility = hidden ? 'hidden' : '';
+    for (const node of [this.el, this.badgeEl, ...this.helperList.map((h) => h.badgeEl)]) {
+      if (node.style.visibility !== visibility) node.style.visibility = visibility;
     }
-    if (this.el.style.visibility === 'hidden') this.el.style.visibility = '';
+    if (hidden) return;
     const ppm = (ppmAtUnitDepth / depth).toFixed(0);
     if (ppm === this.ppm) return;
     this.ppm = ppm;
@@ -1508,7 +1509,7 @@ export class OfficeScene {
 
   /** The user steered the orbit camera: stop gliding and stop refitting on layout changes. */
   private readonly takeOver = (): void => {
-    if (this.walking) return;
+    if (this.walking || this.holdOrbit) return;
     this.tween = null;
     this.userMoved = true;
   };

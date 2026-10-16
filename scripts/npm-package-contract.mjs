@@ -1,6 +1,3 @@
-import { createHash } from 'node:crypto';
-import fs from 'node:fs';
-
 // fastify + @fastify/{cors,static,websocket} are root runtime `dependencies` even though
 // no root source file imports them: esbuild marks them `external` when bundling
 // dist/cli.js (see esbuild.js), so the published `pixel-agents` bin resolves them from
@@ -104,22 +101,4 @@ export function validatePackageFiles(files) {
     throw new Error(`Invalid npm package contents:\n- ${problems.join('\n- ')}`);
   }
   return paths;
-}
-
-export function getPublicationDecision(localIntegrity, publishedIntegrity) {
-  if (!publishedIntegrity) return 'publish';
-  if (publishedIntegrity === localIntegrity) return 'skip';
-  return 'conflict';
-}
-
-export function validateTarballIntegrity(tarballPath, expectedIntegrity) {
-  const actualIntegrity = `sha512-${createHash('sha512')
-    .update(fs.readFileSync(tarballPath))
-    .digest('base64')}`;
-  if (actualIntegrity !== expectedIntegrity) {
-    throw new Error(
-      `Packed artifact integrity changed after verification: expected ${expectedIntegrity}, received ${actualIntegrity}`,
-    );
-  }
-  return actualIntegrity;
 }

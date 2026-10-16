@@ -1,17 +1,12 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import test from 'node:test';
 
 import {
-  getPublicationDecision,
   normalizePackMetadata,
   parsePackJsonOutput,
   REQUIRED_PACKAGE_FILES,
   REQUIRED_PACKAGE_PREFIXES,
   validatePackageFiles,
-  validateTarballIntegrity,
 } from './npm-package-contract.mjs';
 
 function validFiles() {
@@ -50,29 +45,4 @@ test('rejects source and preview files even when required files exist', () => {
     () => validatePackageFiles([...validFiles(), { path: 'dist/browser/index.html' }]),
     /forbidden package path: dist\/browser\/index\.html/,
   );
-});
-
-test('publishes only absent versions and treats integrity safely', () => {
-  assert.equal(getPublicationDecision('sha512-local', null), 'publish');
-  assert.equal(getPublicationDecision('sha512-same', 'sha512-same'), 'skip');
-  assert.equal(getPublicationDecision('sha512-local', 'sha512-other'), 'conflict');
-});
-
-test('rejects a tarball changed after its metadata was created', () => {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pixel-agents-integrity-test-'));
-  const tarballPath = path.join(tmpDir, 'pixel-agents.tgz');
-  const verifiedIntegrity =
-    'sha512-RkN76vtkA1+8p/GSGfbyKAGc1SvEWGcyy0e6CVFdcQKBmX1sAD93WjE7XaXvLvWCO8Q8zHEugymaUbvwb3dBXg==';
-  try {
-    fs.writeFileSync(tarballPath, 'verified tarball');
-    assert.equal(validateTarballIntegrity(tarballPath, verifiedIntegrity), verifiedIntegrity);
-
-    fs.writeFileSync(tarballPath, 'tampered tarball');
-    assert.throws(
-      () => validateTarballIntegrity(tarballPath, verifiedIntegrity),
-      /integrity changed after verification/,
-    );
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
 });
