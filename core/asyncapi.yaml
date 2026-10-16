@@ -340,6 +340,12 @@ components:
           description: Map of agent ID (string) to live tmux metadata.
           additionalProperties:
             $ref: '#/components/schemas/AgentTerminalInfo'
+        serverId:
+          type: string
+          description: |
+            Random id minted once per server process. A different value on a later
+            snapshot means the server restarted, so agent ids no longer name the
+            same sessions.
 
     AgentStatus:
       description: Active vs waiting state for an agent (drives character animation).

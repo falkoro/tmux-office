@@ -248,29 +248,29 @@ export const claudeTeamProvider: TeamProvider = {
   },
 
   getTeamMembers(teamName) {
-    let raw: string | undefined;
+    // Union across config dirs: each account may hold its own copy of the team.
+    let names: Set<string> | null = null; // none parse -> team dissolved
     for (const configDir of listClaudeConfigDirs(os.homedir())) {
       try {
-        raw = fs.readFileSync(path.join(configDir, 'teams', teamName, 'config.json'), 'utf-8');
-        break;
+        const raw = fs.readFileSync(
+          path.join(configDir, 'teams', teamName, 'config.json'),
+          'utf-8',
+        );
+        const data = JSON.parse(raw) as {
+          members?: Array<{ name?: unknown; isActive?: unknown }>;
+        };
+        if (!Array.isArray(data.members)) continue;
+        names ??= new Set<string>();
+        for (const m of data.members) {
+          // isActive:false = the CLI marked this one-shot teammate finished (newer
+          // harnesses keep finished members listed). Missing isActive = active
+          // (older configs never write the field).
+          if (m && typeof m.name === 'string' && m.isActive !== false) names.add(m.name);
+        }
       } catch {
-        /* not in this config dir */
+        /* missing or unreadable in this config dir */
       }
     }
-    if (raw === undefined) return null; // config missing / unreadable -> team dissolved
-    try {
-      const data = JSON.parse(raw) as { members?: Array<{ name?: unknown; isActive?: unknown }> };
-      if (!Array.isArray(data.members)) return null;
-      const names = new Set<string>();
-      for (const m of data.members) {
-        // isActive:false = the CLI marked this one-shot teammate finished (newer
-        // harnesses keep finished members listed). Missing isActive = active
-        // (older configs never write the field).
-        if (m && typeof m.name === 'string' && m.isActive !== false) names.add(m.name);
-      }
-      return names;
-    } catch {
-      return null;
-    }
+    return names;
   },
 };

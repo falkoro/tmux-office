@@ -114,6 +114,7 @@ export interface ExistingAgents {
   folderNames: Record<string, string>;
   externalAgents: Record<string, boolean>;
   agentTerminals?: Record<string, AgentTerminalInfo>;
+  serverId?: string;
 }
 
 export interface AgentSeatMeta {

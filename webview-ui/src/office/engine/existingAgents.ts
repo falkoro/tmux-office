@@ -132,37 +132,12 @@ export function resetSurvivingStatus(os: StatusResetOffice, incoming: number[]):
 }
 
 /**
- * Chimes a reconnect's replay would play a second time: the waiting chime of
- * agents that were already waiting, the permission chime of agents that
- * already showed the permission bubble.
+ * Whether a snapshot comes from another server process than the first one
+ * this page saw. Agent ids restart with the server, so the page's characters
+ * and terminals would attach to the wrong sessions.
  */
-export interface ReplayMute {
-  waiting: Set<number>;
-  permission: Set<number>;
-}
-
-/** Arm the mute from what the surviving agents showed. Call before resetSurvivingStatus. */
-export function muteReplayedChimes(
-  os: StatusResetOffice,
-  incoming: number[],
-  waitingIds: ReadonlySet<number>,
-): ReplayMute {
-  return {
-    waiting: new Set(incoming.filter((id) => waitingIds.has(id))),
-    permission: new Set(
-      incoming.filter((id) => os.characters.get(id)?.bubbleType === 'permission'),
-    ),
-  };
-}
-
-/** An agentStatus arrived: whether it chimes. Its first one releases the agent's mutes. */
-export function statusChimes(mute: ReplayMute, id: number, status: string): boolean {
-  const replayed = mute.waiting.delete(id);
-  mute.permission.delete(id);
-  return status === 'waiting' && !replayed;
-}
-
-/** An agentToolPermission arrived: whether it chimes. Its first one releases the mute. */
-export function permissionChimes(mute: ReplayMute, id: number): boolean {
-  return !mute.permission.delete(id);
+export function isNewServer(seen: { serverId?: string }, serverId: unknown): boolean {
+  if (typeof serverId !== 'string') return false;
+  seen.serverId ??= serverId;
+  return seen.serverId !== serverId;
 }

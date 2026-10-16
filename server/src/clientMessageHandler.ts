@@ -1,3 +1,5 @@
+import * as crypto from 'crypto';
+
 import type { HookProvider } from '../../core/src/provider.js';
 import { resendAgentActivity } from './agentActivityResend.js';
 import { buildAgentDiagnostics } from './agentDiagnostics.js';
@@ -18,6 +20,9 @@ import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
 import { hooksConsentRequest } from './providers/hook/consentGate.js';
 import { claudeProvider, hookProviderById, hookProviders } from './providers/index.js';
+
+/** Minted once per server process, so a client can tell a restarted server from a reconnect. */
+const SERVER_ID = crypto.randomUUID();
 
 type WsSend = (message: Record<string, unknown>) => void;
 
@@ -100,7 +105,7 @@ export function handleClientMessage(
       const id = msg.id as number;
       const agent = store.get(id);
       if (agent && runtime) {
-        runtime.dismissalTracker.dismiss(agent.jsonlFile);
+        runtime.dismissalTracker.close(agent.jsonlFile);
         runtime.removeAgent(id);
       }
       break;
@@ -506,6 +511,7 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
   const agentTerminals = agentTerminalMap(store);
   send({
     type: 'existingAgents',
+    serverId: SERVER_ID,
     agents: agentIds,
     agentMeta,
     folderNames,

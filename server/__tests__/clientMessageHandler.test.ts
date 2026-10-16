@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { AgentRuntime } from '../src/agentRuntime.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
@@ -353,6 +353,28 @@ describe('clientMessageHandler: areas + carpet wire ordering', () => {
     it('sends no office rooms when none are configured', () => {
       handleClientMessage({ type: 'webviewReady' }, (m) => sent.push(m), ctx);
       expect(sent.map((m) => m.type)).not.toContain('officeRooms');
+    });
+
+    it('tags every snapshot with one server id per process', async () => {
+      const serverIdOf = (messages: Array<{ type: string }>) =>
+        (messages.find((m) => m.type === 'existingAgents') as { serverId?: unknown }).serverId;
+      const first: Array<{ type: string }> = [];
+      const second: Array<{ type: string }> = [];
+      handleClientMessage({ type: 'webviewReady' }, (m) => first.push(m as { type: string }), ctx);
+      handleClientMessage({ type: 'webviewReady' }, (m) => second.push(m as { type: string }), ctx);
+      expect(typeof serverIdOf(first)).toBe('string');
+      expect(serverIdOf(second)).toBe(serverIdOf(first));
+
+      vi.resetModules();
+      const restarted = await import('../src/clientMessageHandler.js');
+      const third: Array<{ type: string }> = [];
+      restarted.handleClientMessage(
+        { type: 'webviewReady' },
+        (m) => third.push(m as { type: string }),
+        ctx,
+      );
+      expect(typeof serverIdOf(third)).toBe('string');
+      expect(serverIdOf(third)).not.toBe(serverIdOf(first));
     });
 
     it('emits layoutLoaded after existingAgents so buffered agents materialize', () => {

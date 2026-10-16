@@ -181,6 +181,44 @@ describe('OfficeScene pointer gestures', () => {
     }
   });
 
+  test('walking into a back room starts on the strip in front of the office', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: () => undefined,
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const room = (id: string, z: number) => ({
+      id,
+      x: 0,
+      z,
+      width: 8,
+      depth: 8,
+      background: false,
+      pods: [],
+      desks: [],
+    });
+    const inner = scene as unknown as {
+      plan: unknown;
+      link: { focus: unknown };
+      walkX: number;
+      walkZ: number;
+    };
+    inner.plan = {
+      rooms: [room('back', -5), room('front', 5)],
+      columns: 1,
+      narrow: false,
+      width: 10,
+      depth: 20,
+    };
+    inner.link.focus = { kind: 'room', id: 'back' };
+
+    scene.toggleWalk();
+
+    expect(inner.walkZ).toBeGreaterThan(10);
+    expect(inner.walkX).toBe(0);
+  });
+
   test('at eye level a desk hides labels behind it only up to its seated crown', async () => {
     const { DeskView, OfficeScene } = await import('../src/office3d/scene.js');
     const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {

@@ -989,7 +989,7 @@ export class OfficeScene {
     this.walkAt = 0;
     const area = focusArea(this.plan, this.link.focus);
     const landed = stepWalk(
-      { x: (area.minX + area.maxX) / 2, z: area.maxZ + OFFICE3D_WALK_PORCH },
+      { x: (area.minX + area.maxX) / 2, z: this.plan.depth / 2 + OFFICE3D_WALK_PORCH },
       0,
       NO_WALK_KEYS,
       0,

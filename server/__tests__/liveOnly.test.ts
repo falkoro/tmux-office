@@ -7,8 +7,10 @@ import type { StateAdapter } from '../../core/src/adapter.js';
 import { normalizeProjectPath } from '../../core/src/normalizeProjectPath.js';
 import { AgentRuntime } from '../src/agentRuntime.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
+import { handleClientMessage } from '../src/clientMessageHandler.js';
 import {
   CLAUDE_SESSION_POLL_INTERVAL_MS,
+  DISMISSED_COOLDOWN_MS,
   EXTERNAL_SCAN_INTERVAL_MS,
   PROJECT_SCAN_INTERVAL_MS,
 } from '../src/constants.js';
@@ -334,6 +336,22 @@ describe('live-only', () => {
     expect(planted.store.size).toBe(1);
     expect([...planted.store.values()][0]?.sessionId).toBe(planted.sessionId);
     expect(planted.runtime.dismissalTracker.isDismissed(planted.jsonl)).toBe(false);
+  });
+
+  it('keeps a live session the user closed closed after the dismissal cooldown', async () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    const id = [...planted.store.keys()][0]!;
+    handleClientMessage({ type: 'closeAgent', id }, () => undefined, {
+      store: planted.store,
+      runtime: planted.runtime,
+      cache: null,
+    });
+    expect(planted.store.size).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(DISMISSED_COOLDOWN_MS + CLAUDE_SESSION_POLL_INTERVAL_MS);
+
+    expect(planted.store.size).toBe(0);
   });
 
   it('leaves the agent in place when live-only is off and the session file disappears', async () => {

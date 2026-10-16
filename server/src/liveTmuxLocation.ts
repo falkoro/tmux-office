@@ -18,7 +18,11 @@ export function resolveLiveTmuxLocations(
   const resolved = new Map<string, TmuxLocation | null>();
   if (panes === null) {
     for (const session of sessions) {
-      resolved.set(session.sessionId, session.tmux ? { ...session.tmux } : null);
+      const location = session.tmux;
+      resolved.set(
+        session.sessionId,
+        location && isSafeTmuxLocation(location) ? { ...location } : null,
+      );
     }
     return resolved;
   }

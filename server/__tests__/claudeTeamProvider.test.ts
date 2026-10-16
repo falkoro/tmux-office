@@ -449,6 +449,27 @@ describe('claudeTeamProvider', () => {
       }
     });
 
+    it('unions the members of a team kept under several config dirs', () => {
+      const stale = path.join(os.homedir(), '.claude', 'teams', TEAM_NAME);
+      fs.mkdirSync(stale, { recursive: true });
+      fs.writeFileSync(
+        path.join(stale, 'config.json'),
+        JSON.stringify({ members: [{ name: 'lead' }] }),
+      );
+      const live = path.join(os.homedir(), '.claude-work', 'teams', TEAM_NAME);
+      fs.mkdirSync(live, { recursive: true });
+      try {
+        fs.writeFileSync(
+          path.join(live, 'config.json'),
+          JSON.stringify({ members: [{ name: 'tester' }] }),
+        );
+        const result = claudeTeamProvider.getTeamMembers(TEAM_NAME);
+        expect([...result!].sort()).toEqual(['lead', 'tester']);
+      } finally {
+        fs.rmSync(path.join(os.homedir(), '.claude-work'), { recursive: true, force: true });
+      }
+    });
+
     it('returns null when config is not valid JSON', () => {
       const teamDir = path.join(os.homedir(), '.claude', 'teams', TEAM_NAME);
       fs.mkdirSync(teamDir, { recursive: true });

@@ -46,6 +46,7 @@ export function tmuxSocketArgs(): string[] {
 export function isSafeTmuxLocation(location: TmuxLocation): boolean {
   if (!location.session || location.session.startsWith('-')) return false;
   if (/[\s;\0]/.test(location.session)) return false;
+  if (THROWAWAY_SESSION.test(location.session)) return false;
   return WINDOW_ID.test(location.windowId) && PANE_ID.test(location.paneId);
 }
 

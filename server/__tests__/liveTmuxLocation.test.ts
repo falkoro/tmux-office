@@ -64,6 +64,14 @@ describe('resolveLiveTmuxLocations', () => {
     expect(locations.get('s1')).toEqual(registryTmux);
   });
 
+  it('drops a registry location in our own throwaway session when the pane list is unavailable', () => {
+    const locations = resolveLiveTmuxLocations(
+      [{ sessionId: 's1', tmux: { ...registryTmux, session: 'pa-web-0123456789abcdef' } }],
+      null,
+    );
+    expect(locations.get('s1')).toBeNull();
+  });
+
   it('rejects unsafe names from the pane list', () => {
     for (const session of ['bad name', '-flag', 'bad;name']) {
       const locations = resolveLiveTmuxLocations(sessions, [{ ...movedPane, session }]);
