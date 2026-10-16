@@ -79,6 +79,22 @@ describe('parseSessionFile', () => {
     }
   });
 
+  it('drops a headless run and marks a name the user chose', () => {
+    const base = { pid: 4, sessionId: 's', cwd: '/work', name: 'falk-3b' };
+    expect(
+      parseSessionFile(JSON.stringify({ ...base, entrypoint: 'sdk-cli' }), configDir),
+    ).toBeNull();
+    expect(
+      parseSessionFile(JSON.stringify({ ...base, entrypoint: 'cli' }), configDir)?.nameChosen,
+    ).toBeUndefined();
+    expect(
+      parseSessionFile(JSON.stringify({ ...base, nameSource: 'derived' }), configDir)?.nameChosen,
+    ).toBeUndefined();
+    expect(
+      parseSessionFile(JSON.stringify({ ...base, nameSource: 'user' }), configDir)?.nameChosen,
+    ).toBe(true);
+  });
+
   it('drops a file whose pid is unusable', () => {
     expect(
       parseSessionFile(JSON.stringify({ pid: 0, sessionId: 's', cwd: '/work' }), configDir),

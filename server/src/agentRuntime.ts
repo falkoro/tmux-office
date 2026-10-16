@@ -566,10 +566,15 @@ export class AgentRuntime {
     // Copies only. Registry objects stay as read from disk, so a later failed
     // listing can fall back to those tmux fields.
     const locations = resolveLiveTmuxLocations(sessions, this.paneIndex);
-    const corrected = sessions.map((session) => ({
-      ...session,
-      tmux: locations.get(session.sessionId) ?? null,
-    }));
+    const windowNames = new Map(
+      (this.paneIndex ?? []).map((pane) => [pane.windowId, pane.windowName]),
+    );
+    // A chosen name wins, then the tmux window's name, then Claude's name for the folder.
+    const corrected = sessions.map((session) => {
+      const tmux = locations.get(session.sessionId) ?? null;
+      const windowName = tmux && !session.nameChosen ? windowNames.get(tmux.windowId) : undefined;
+      return { ...session, tmux, name: windowName ?? session.name };
+    });
     const byId = new Map(corrected.map((session) => [session.sessionId, session]));
     for (const session of corrected) {
       this.followSessionSwitch(session, byId);

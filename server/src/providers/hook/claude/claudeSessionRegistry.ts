@@ -30,6 +30,8 @@ export interface LiveClaudeSession {
   /** `"busy"` or `"idle"` as the session file reported it. */
   status: string | null;
   name: string | null;
+  /** True when `/rename` or another session chose the name; absent when Claude derived it from the folder. */
+  nameChosen?: boolean;
   /** Start time of the process, field 22 of `/proc/<pid>/stat`. */
   procStart?: string;
   /** `linux:<machine-id>:pid:[<inode>]`, the pid namespace the pid belongs to. */
@@ -52,6 +54,9 @@ export function parseTmuxLocation(value: string): TmuxLocation | null {
   return { session, windowId, paneId };
 }
 
+/** `nameSource` values that mean someone picked the name. `derived`, `collision` and `auto` are Claude's own. */
+const CHOSEN_NAME_SOURCES = new Set(['user', 'peer', 'hook']);
+
 function optionalString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
@@ -60,7 +65,8 @@ function optionalString(value: unknown): string | null {
  * Parse one session file. Returns null for malformed input; the caller skips
  * the file. Extra fields are ignored. `tmux` absent or JSON null means the
  * process is not inside tmux. A `tmux` that does not parse, for example a
- * session name with a space, keeps the session without a location.
+ * session name with a space, keeps the session without a location. A headless
+ * run (`entrypoint` `sdk-cli`) is dropped.
  */
 export function parseSessionFile(raw: string, configDir: string): LiveClaudeSession | null {
   let data: unknown;
@@ -75,6 +81,8 @@ export function parseSessionFile(raw: string, configDir: string): LiveClaudeSess
   if (typeof pid !== 'number' || !Number.isInteger(pid) || pid <= 0) return null;
   if (typeof sessionId !== 'string' || sessionId.length === 0) return null;
   if (typeof cwd !== 'string' || cwd.length === 0) return null;
+  // `claude -p` runs (gates, scripts, scheduled wake-ups) are tools of the session that started them, not agents.
+  if (typeof record.entrypoint === 'string' && record.entrypoint.startsWith('sdk-')) return null;
 
   const tmux = typeof record.tmux === 'string' ? parseTmuxLocation(record.tmux) : null;
 
@@ -86,6 +94,7 @@ export function parseSessionFile(raw: string, configDir: string): LiveClaudeSess
     tmux,
     status: optionalString(record.status),
     name: optionalString(record.name),
+    ...(CHOSEN_NAME_SOURCES.has(String(record.nameSource)) ? { nameChosen: true } : {}),
     procStart: optionalString(record.procStart) ?? undefined,
     pidDomain: optionalString(record.pidDomain) ?? undefined,
   };

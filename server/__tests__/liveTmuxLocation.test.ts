@@ -186,6 +186,15 @@ describe('tmux pane list', () => {
     expect(parseTmuxPaneList('')).toEqual([]);
   });
 
+  it('keeps a window name only when tmux does not rename the window itself', () => {
+    expect(
+      parseTmuxPaneList(`%5 ${PID} work-5 @9\t0office: night shift\n%1 7 demo @1\t1zsh\n`),
+    ).toEqual([
+      { ...movedPane, windowName: 'office: night shift' },
+      { paneId: '%1', panePid: 7, session: 'demo', windowId: '@1' },
+    ]);
+  });
+
   it('leaves out the throwaway sessions web terminals create', () => {
     expect(
       parseTmuxPaneList(`%5 ${PID} ${throwawaySessionName()} @9\n%5 ${PID} work-5 @9\n`),
@@ -217,7 +226,7 @@ describe('tmux pane list', () => {
         'list-panes',
         '-a',
         '-F',
-        '#{pane_id} #{pane_pid} #{session_name} #{window_id}',
+        '#{pane_id} #{pane_pid} #{session_name} #{window_id}\t#{automatic-rename}#{window_name}',
       ]);
     } finally {
       if (previous === undefined) delete process.env.PIXEL_AGENTS_TMUX_SOCKET;
@@ -227,7 +236,7 @@ describe('tmux pane list', () => {
       'list-panes',
       '-a',
       '-F',
-      '#{pane_id} #{pane_pid} #{session_name} #{window_id}',
+      '#{pane_id} #{pane_pid} #{session_name} #{window_id}\t#{automatic-rename}#{window_name}',
     ]);
   });
 
@@ -334,6 +343,12 @@ describe('tmux pane list', () => {
       await expect(listTmuxPanes()).resolves.toEqual([
         { paneId, panePid, session: 'work-5', windowId },
       ]);
+      await execFileAsync('tmux', ['-L', socketName, 'rename-window', '-t', 'work-5', 'office'], {
+        timeout: 4000,
+      });
+      await expect(listTmuxPanes()).resolves.toEqual([
+        { paneId, panePid, session: 'work-5', windowId, windowName: 'office' },
+      ]);
       await expect(
         resolvePaneLocation({ session: 'work-5', windowId: '@0', paneId: paneId! }, panePid),
       ).resolves.toEqual({ session: 'work-5', windowId, paneId });
@@ -371,7 +386,11 @@ describe('live pane following', () => {
     return dir;
   }
 
-  function writeSession(root: string, tmux: string): ClaudeSessionRegistry {
+  function writeSession(
+    root: string,
+    tmux: string,
+    extra: Record<string, unknown> = {},
+  ): ClaudeSessionRegistry {
     const cwd = path.join(root, 'work');
     fs.mkdirSync(cwd, { recursive: true });
     const sessionId = '11111111-1111-1111-1111-111111111111';
@@ -389,6 +408,7 @@ describe('live pane following', () => {
         tmux,
         status: 'idle',
         name: 'zeta',
+        ...extra,
       }),
     );
     return new ClaudeSessionRegistry({ homeDir: root });
@@ -415,6 +435,30 @@ describe('live pane following', () => {
       name: 'zeta',
       tmux: { session: 'work-5', windowId: '@9', paneId: '%5' },
     });
+  });
+
+  it('names a desk after its tmux window unless the session was renamed', async () => {
+    vi.useFakeTimers();
+    const office: TmuxPaneRecord = { ...movedPane, windowName: 'office' };
+    const store = new AgentStateStore();
+    runtime = new AgentRuntime(store, claudeProvider);
+    runtime.forceWatchAll = true;
+    runtime.startLiveSessionRegistry(writeSession(tempDir(), 'work-3:@5.%5'), () =>
+      Promise.resolve([office]),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect([...store.values()][0]?.registryName).toBe('office');
+    runtime.dispose();
+
+    const renamed = new AgentStateStore();
+    runtime = new AgentRuntime(renamed, claudeProvider);
+    runtime.forceWatchAll = true;
+    runtime.startLiveSessionRegistry(
+      writeSession(tempDir(), 'work-3:@5.%5', { nameSource: 'user' }),
+      () => Promise.resolve([office]),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect([...renamed.values()][0]?.registryName).toBe('zeta');
   });
 
   it('shows a session the registry adopts under its working folder', async () => {

@@ -179,6 +179,8 @@ export interface TmuxPaneRecord {
   panePid: number;
   session: string;
   windowId: string;
+  /** The window's name when someone set it; absent while tmux renames the window on its own. */
+  windowName?: string;
 }
 
 /** Argv for the read-only pane listing. Socket flags match the rest of the server. */
@@ -188,13 +190,15 @@ export function listTmuxPanesArgv(): string[] {
     'list-panes',
     '-a',
     '-F',
-    '#{pane_id} #{pane_pid} #{session_name} #{window_id}',
+    '#{pane_id} #{pane_pid} #{session_name} #{window_id}\t#{automatic-rename}#{window_name}',
   ];
 }
 
 /**
  * Parse `list-panes` output. The session name is whatever sits between the
  * pane id and the window id, so a name with spaces survives for the safety check.
+ * After the tab comes the automatic-rename flag and the window name, kept only
+ * when the flag is 0.
  */
 export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
   const panes: TmuxPaneRecord[] = [];
@@ -202,7 +206,9 @@ export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
     if (!line) {
       continue;
     }
-    const parts = line.split(' ');
+    const tab = line.indexOf('\t');
+    const tail = tab < 0 ? '' : line.slice(tab + 1);
+    const parts = (tab < 0 ? line : line.slice(0, tab)).split(' ');
     if (parts.length < 4) {
       continue;
     }
@@ -219,7 +225,8 @@ export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
     ) {
       continue;
     }
-    panes.push({ paneId, panePid, session, windowId });
+    const windowName = tail.startsWith('0') ? tail.slice(1) : '';
+    panes.push({ paneId, panePid, session, windowId, ...(windowName ? { windowName } : {}) });
   }
   return panes;
 }
