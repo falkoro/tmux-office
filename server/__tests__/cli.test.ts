@@ -146,15 +146,6 @@ describe('parseArgs', () => {
 // writes nothing), and the disclosure-content pins live in consentCopy.test.ts
 // plus the handshake test asserting the request carries that copy verbatim.
 
-/**
- * These spawn the real bundled dist/cli.js (built by esbuild), not the TS
- * source -- unlike the parseArgs tests above (which only prove importing the
- * module for its exports is side-effect-free), these prove the
- * `require.main === module` guard added to cli.ts still lets `main()` run
- * when the file IS executed directly, i.e. production behavior is intact.
- * Requires `npm run compile` (or `node esbuild.js`) to have produced
- * dist/cli.js first; reported as a loud skip if it hasn't.
- */
 describe('accessConfigFromEnv', () => {
   const TEAM = 'example.cloudflareaccess.com';
 
@@ -183,6 +174,15 @@ describe('accessConfigFromEnv', () => {
   });
 });
 
+/**
+ * These spawn the real bundled dist/cli.js (built by esbuild), not the TS
+ * source -- unlike the parseArgs tests above (which only prove importing the
+ * module for its exports is side-effect-free), these prove the
+ * `require.main === module` guard added to cli.ts still lets `main()` run
+ * when the file IS executed directly, i.e. production behavior is intact.
+ * Requires `npm run compile` (or `node esbuild.js`) to have produced
+ * dist/cli.js first; reported as a loud skip if it hasn't.
+ */
 describe('dist/cli.js entry-point guard', () => {
   /** These tests spawn the BUNDLED CLI, so they need `npm run compile` to have
    *  run. Reported as a loud skip rather than an early `return`, which Vitest

@@ -640,7 +640,7 @@
 }
 
 /* The pixel view's toolbar, dressed like the room bar while the 3D view shows. */
-[data-view='3d'] .pixel-panel {
+[data-view='3d'] .bottom-toolbar {
   padding: 4px;
   gap: 4px;
   background: rgb(46 28 15 / 0.82);
@@ -648,7 +648,7 @@
   border-radius: 999px;
   box-shadow: var(--o3d-lift);
 }
-[data-view='3d'] .pixel-panel > button {
+[data-view='3d'] .bottom-toolbar > button {
   padding: 4px 13px 5px;
   font: 600 15px var(--o3d-sans);
   color: var(--o3d-cream);
@@ -656,6 +656,6 @@
   border: 2px solid transparent;
   border-radius: 999px;
 }
-[data-view='3d'] .pixel-panel > button:hover {
+[data-view='3d'] .bottom-toolbar > button:hover {
   background: var(--o3d-wood-dark);
 }

@@ -210,6 +210,7 @@ export function useExtensionMessages(
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
     let pendingAgents: PendingAgent[] = [];
+    let reloading = false;
 
     // Accumulate distinct folderNames seen across agents (never removed during the
     // session): the source for the Areas folder-mapping dropdown, so a folder stays
@@ -274,6 +275,7 @@ export function useExtensionMessages(
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handler = (msg: any) => {
+      if (reloading) return;
       const os = getOfficeState();
       // CI / e2e diagnostic: record every received transport message on the
       // window-side log. The fixture reads window.__pixelAgentsTestHooks.
@@ -402,6 +404,7 @@ export function useExtensionMessages(
         });
       } else if (msg.type === 'existingAgents') {
         if (isNewServer(firstServerRef.current, msg.serverId) && isBrowserRuntime) {
+          reloading = true;
           flushLayoutSave?.();
           window.location.reload();
           return;

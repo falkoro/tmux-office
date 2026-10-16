@@ -7,6 +7,7 @@
 #   scripts/office-demo-rig.sh start [name] [port]   prints the office URL
 #   scripts/office-demo-rig.sh stop  [name]
 set -Eeuo pipefail
+umask 077
 
 cmd="${1:-}"
 name="${2:-demo}"

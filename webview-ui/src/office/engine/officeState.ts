@@ -158,6 +158,7 @@ export class OfficeState {
 
     // First pass: try to keep characters at their existing seats
     for (const ch of this.characters.values()) {
+      if (ch.matrixEffect === 'despawn') continue;
       if (ch.seatId && this.seats.has(ch.seatId)) {
         const seat = this.seats.get(ch.seatId)!;
         if (!seat.assigned) {
@@ -178,7 +179,7 @@ export class OfficeState {
 
     // Second pass: assign remaining characters to free seats
     for (const ch of this.characters.values()) {
-      if (ch.seatId) continue;
+      if (ch.seatId || ch.matrixEffect === 'despawn') continue;
       const seatId = this.findFreeSeat(ch.folderName);
       if (seatId) {
         this.seats.get(seatId)!.assigned = true;

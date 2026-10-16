@@ -9,6 +9,7 @@ import {
   TERMINAL_FG,
   TERMINAL_FONT_MAX_PX,
   TERMINAL_FONT_MIN_PX,
+  TERMINAL_QUEUED_INPUT_MAX_BYTES,
 } from '../constants.js';
 
 const terminalFontFamily = 'ui-monospace, monospace';
@@ -132,8 +133,22 @@ export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: Term
       else term.write(bytes);
     };
     const encoder = new TextEncoder();
+    const queued: Uint8Array[] = [];
+    let queuedBytes = 0;
+    socket.onopen = () => {
+      for (const bytes of queued) socket.send(bytes);
+      queued.length = 0;
+    };
     const input = term.onData((data) => {
-      if (socket.readyState === WebSocket.OPEN) socket.send(encoder.encode(data));
+      const bytes = encoder.encode(data);
+      if (socket.readyState === WebSocket.OPEN) socket.send(bytes);
+      else if (
+        socket.readyState === WebSocket.CONNECTING &&
+        queuedBytes + bytes.length <= TERMINAL_QUEUED_INPUT_MAX_BYTES
+      ) {
+        queued.push(bytes);
+        queuedBytes += bytes.length;
+      }
     });
 
     const observer = new ResizeObserver(() => fit());
@@ -141,6 +156,7 @@ export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: Term
     return () => {
       observer.disconnect();
       input.dispose();
+      socket.onopen = null;
       socket.onclose = null;
       socket.onerror = null;
       socket.close();
