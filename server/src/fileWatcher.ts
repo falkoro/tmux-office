@@ -1646,6 +1646,14 @@ export function reassignAgentToFile(
   agent.sessionId = path.basename(newFilePath, '.jsonl');
   agent.jsonlFile = newFilePath;
   agent.fileOffset = 0;
+  try {
+    const stat = fs.statSync(newFilePath);
+    if (stat.birthtimeMs > 0 && Date.now() - stat.birthtimeMs > EXTERNAL_SCAN_INTERVAL_MS * 2) {
+      agent.fileOffset = stat.size;
+    }
+  } catch {
+    /* start from beginning if stat fails */
+  }
   agent.lineBuffer = '';
   persistAgents();
 

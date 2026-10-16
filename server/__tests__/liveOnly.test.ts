@@ -655,17 +655,28 @@ describe('live-only', () => {
         planted.sessionFile,
         JSON.stringify({ pid: process.pid, sessionId, cwd: planted.cwd, tmux: 'demo:@2.%3' }),
       );
+    const statuses: unknown[] = [];
+    planted.store.on('broadcast', (msg) => {
+      if (msg.type === 'agentStatus') statuses.push(msg.status);
+    });
+    const turnEnd = '{"type":"system","subtype":"turn_duration"}\n';
     const nextSession = '77777777-7777-7777-7777-777777777777';
-    fs.writeFileSync(path.join(planted.projectDir, `${nextSession}.jsonl`), '{"type":"user"}\n');
+    fs.writeFileSync(path.join(planted.projectDir, `${nextSession}.jsonl`), turnEnd);
     live(nextSession);
     await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
     expect(planted.store.get(agent.id)?.sessionId).toBe(nextSession);
+    expect(statuses).toContain('waiting');
 
+    fs.appendFileSync(planted.jsonl, turnEnd);
+    vi.setSystemTime(Date.now() + EXTERNAL_SCAN_INTERVAL_MS * 2 + 1000);
+    statuses.length = 0;
     live(planted.sessionId);
     await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
     expect(lifecycle).toEqual([]);
     expect(planted.store.get(agent.id)?.sessionId).toBe(planted.sessionId);
     expect(planted.store.get(agent.id)?.jsonlFile).toBe(planted.jsonl);
+    expect(planted.store.get(agent.id)?.fileOffset).toBe(fs.statSync(planted.jsonl).size);
+    expect(statuses).not.toContain('waiting');
   });
 
   it('keeps the agent through /clear and a resume back before the new transcript exists', async () => {

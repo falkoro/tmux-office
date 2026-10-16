@@ -67,5 +67,8 @@ export function applyAliases(rooms: RoomModel[], store = browserStore()): void {
       for (const desk of pod.desks)
         desk.label = loadAlias(aliasKey('desk', desk.name), store) ?? desk.label;
     }
+    if (room.pods.length === 1 && room.pods[0].id === room.id) {
+      room.title = loadAlias(aliasKey('pod', room.id), store) ?? room.title;
+    }
   }
 }

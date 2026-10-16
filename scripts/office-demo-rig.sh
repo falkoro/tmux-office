@@ -16,6 +16,7 @@ port="${3:-3199}"
 [[ "$port" =~ ^[1-9][0-9]*$ ]] || { echo "port must be a number without leading zeros" >&2; exit 2; }
 sock="pa-demo-${name}"
 dir="${TMPDIR:-/tmp}/pa-demo-${name}"
+[[ ! -e "$dir" || -O "$dir" ]] || { echo "$dir exists and is not yours" >&2; exit 1; }
 root="${PA_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 # session|window name|config dir|state|cols|rows
@@ -77,7 +78,7 @@ start_rig() {
   [[ -f "$root/dist/cli.js" ]] || { echo "build first: npm run build" >&2; exit 1; }
   stop_rig
   trap stop_rig ERR
-  mkdir -p "$dir/home" "$dir/panes"
+  mkdir "$dir" "$dir/home" "$dir/panes"
 
   local i=0 spec session window cfg state cols rows sid cwd proj file pid loc
   for spec in "${agents[@]}"; do

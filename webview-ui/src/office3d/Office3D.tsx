@@ -111,10 +111,16 @@ export default function Office3D(props: Office3DProps) {
   const room = barRoom(rooms, focused);
   const pods = room && room.pods.length > 1 ? room.pods : [];
   const allPods = rooms.flatMap((r) => r.pods);
-  const selectedDesk = allPods
-    .flatMap((p) => p.desks)
-    .find((d) => d.agentId === props.officeState.selectedAgentId);
-  const focusedPod = focused?.kind === 'pod' ? allPods.find((p) => p.id === focused.id) : undefined;
+  const { selectedAgentId: selectedId, subagentMeta } = props.officeState;
+  const selectedAgentId =
+    selectedId === null ? null : (subagentMeta.get(selectedId)?.parentAgentId ?? selectedId);
+  const selectedDesk = allPods.flatMap((p) => p.desks).find((d) => d.agentId === selectedAgentId);
+  const focusedPod =
+    focused?.kind === 'pod'
+      ? allPods.find((p) => p.id === focused.id)
+      : room?.pods.length === 1 && room.pods[0].id === focused?.id
+        ? room.pods[0]
+        : undefined;
   // VS Code webviews block window.prompt.
   const target = !isBrowserRuntime
     ? null

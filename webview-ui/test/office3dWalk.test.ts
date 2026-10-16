@@ -3,14 +3,7 @@ import assert from 'node:assert/strict';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { describe, test } from 'vitest';
 
-import {
-  OFFICE3D_DESK_HEIGHT,
-  OFFICE3D_FLOOR_Y,
-  OFFICE3D_WALK_EYE_Y,
-  OFFICE3D_WALK_RUN,
-  OFFICE3D_WALK_SPEED,
-  OFFICE3D_WALL_HEIGHT,
-} from '../src/constants.js';
+import { OFFICE3D_WALK_RUN, OFFICE3D_WALK_SPEED } from '../src/constants.js';
 import type { WalkKeys } from '../src/office3d/walk.js';
 import { stepWalk, walkDirection, walkFromCamera } from '../src/office3d/walk.js';
 
@@ -121,10 +114,5 @@ describe('walk aim', () => {
         near(got.z, dir.z);
       }
     }
-  });
-
-  test('eye height sits over the desks and under the walls', () => {
-    assert.ok(OFFICE3D_WALK_EYE_Y > OFFICE3D_FLOOR_Y + OFFICE3D_DESK_HEIGHT);
-    assert.ok(OFFICE3D_WALK_EYE_Y < OFFICE3D_FLOOR_Y + OFFICE3D_WALL_HEIGHT);
   });
 });

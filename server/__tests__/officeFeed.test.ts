@@ -175,11 +175,11 @@ describe('GET /api/office', () => {
       officeFeed: feed,
       officeEmbedOrigins,
     });
-    return handle.app;
+    return { app: handle.app, store };
   }
 
   it('serves the feed without an Origin and to an allowed one', async () => {
-    const app = await start(['http://127.0.0.1:8820']);
+    const { app } = await start(['http://127.0.0.1:8820']);
     for (const headers of [{}, { origin: 'http://127.0.0.1:8820' }]) {
       const res = await app.inject({ method: 'GET', url: '/api/office', headers });
       expect(res.statusCode).toBe(200);
@@ -189,7 +189,7 @@ describe('GET /api/office', () => {
   });
 
   it('refuses any other browser origin', async () => {
-    const app = await start(['http://127.0.0.1:8820']);
+    const { app } = await start(['http://127.0.0.1:8820']);
     const res = await app.inject({
       method: 'GET',
       url: '/api/office',
@@ -200,8 +200,23 @@ describe('GET /api/office', () => {
   });
 
   it('never leaks tool text or paths', async () => {
-    const app = await start([]);
+    const { app, store } = await start([]);
+    const secret = 'quokka-launch-codes';
+    const file = '/home/zeta-3b/private/plan.md';
+    for (const type of ['agentToolStart', 'subagentToolStart'] as const) {
+      store.broadcast({
+        type,
+        id: 1,
+        toolId: 't1',
+        parentToolId: 'p1',
+        toolName: 'Read',
+        status: `Reading ${file} for ${secret}`,
+      });
+    }
     const res = await app.inject({ method: 'GET', url: '/api/office' });
+    expect(res.body).toContain('work-8');
+    expect(res.body).not.toContain(secret);
+    expect(res.body).not.toContain(file);
     expect(Object.keys(res.json().desks[0]).sort()).toEqual(
       ['helpers', 'name', 'pinned', 'room', 'session', 'status'].sort(),
     );

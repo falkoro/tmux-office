@@ -40,6 +40,26 @@ describe('claude config dirs', () => {
     ]);
   });
 
+  it.each([
+    '.claude.bak',
+    '.claude.old',
+    '.claude.orig',
+    '.claude.bak-2026-01-01',
+    '.claude.old-1',
+    '.claude-work.orig-2',
+    '.claude-backup',
+    '.claude.backup',
+  ])('skips the backup dir %s', (name) => {
+    const root = home();
+    fs.mkdirSync(path.join(root, '.claude'));
+    fs.mkdirSync(path.join(root, '.claude-older'));
+    fs.mkdirSync(path.join(root, name));
+    expect(listClaudeConfigDirs(root).map((dir) => path.basename(dir))).toEqual([
+      '.claude',
+      '.claude-older',
+    ]);
+  });
+
   it('follows a symlink to a config directory', () => {
     const root = home();
     const real = path.join(root, 'real-claude');

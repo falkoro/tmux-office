@@ -153,6 +153,18 @@ describe('renaming', () => {
     assert.equal(cleared[0].pods[0].title, 'work-4');
   });
 
+  test("a room that is one session shows that session's name in the bar", () => {
+    const store = memoryStore();
+    const solo = office();
+    solo[0].pods[0].id = 'work';
+    saveAlias(aliasKey('pod', 'work'), 'oss crew', store);
+    applyAliases(solo, store);
+    assert.equal(solo[0].title, 'oss crew');
+    const shared = office();
+    applyAliases(shared, store);
+    assert.equal(shared[0].title, 'work');
+  });
+
   test('blocked storage keeps the tmux names', () => {
     const rooms = office();
     saveAlias(aliasKey('pod', 'work-4'), 'oss crew', blocked);

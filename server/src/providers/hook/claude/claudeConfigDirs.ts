@@ -6,7 +6,7 @@ import { normalizeProjectPath } from '../../../../../core/src/normalizeProjectPa
 /** Default name glob for Claude config directories inside a home directory. */
 export const DEFAULT_CLAUDE_CONFIG_DIR_GLOB = '.claude*';
 
-const BAK_DIR = /\.bak-/;
+const BAK_DIR = /\.(bak|old|orig)(-|$)|[-.]backup$/;
 
 /**
  * Turn a glob that only uses `*` into an anchored regex.
@@ -40,8 +40,9 @@ function isDirectory(parent: string, entry: fs.Dirent, previous: readonly string
  * Every Claude config directory under `homeDir`.
  *
  * Directories only, so a file such as `~/.claude.json` is ignored. Names
- * matching `*.bak-*` (for example `~/.claude.bak-2026-01-01`) are backups,
- * not live config dirs.
+ * ending in `.bak`, `.old`, `.orig`, `-backup` or `.backup`, or containing
+ * `.bak-`, `.old-` or `.orig-` (for example `~/.claude.bak-2026-01-01`) are
+ * backups, not live config dirs.
  *
  * `previous` is the last listing. When the home listing or a symlink's stat
  * fails for any reason but ENOENT, those dirs are kept rather than dropped.
