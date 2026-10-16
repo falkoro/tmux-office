@@ -92,6 +92,8 @@ export class AgentRuntime {
    * returned, so this tick keeps the registry's own tmux fields.
    */
   private paneIndex: readonly TmuxPaneRecord[] | null = null;
+  /** Window names from the last pane list that arrived, so a failed list keeps them. */
+  private windowNames = new Map<string, string | undefined>();
   /** Bumped on each list and on dispose, so a stale result cannot apply. */
   private livePaneGeneration = 0;
 
@@ -547,6 +549,9 @@ export class AgentRuntime {
       return;
     }
     this.paneIndex = panes;
+    if (panes) {
+      this.windowNames = new Map(panes.map((pane) => [pane.windowId, pane.windowName]));
+    }
     try {
       registry.refresh();
       this.applyLiveSessions(registry);
@@ -566,13 +571,18 @@ export class AgentRuntime {
     // Copies only. Registry objects stay as read from disk, so a later failed
     // listing can fall back to those tmux fields.
     const locations = resolveLiveTmuxLocations(sessions, this.paneIndex);
-    const windowNames = new Map(
-      (this.paneIndex ?? []).map((pane) => [pane.windowId, pane.windowName]),
-    );
-    // A chosen name wins, then the tmux window's name, then Claude's name for the folder.
+    const sessionsInWindow = new Map<string, number>();
+    for (const tmux of locations.values()) {
+      if (tmux) sessionsInWindow.set(tmux.windowId, (sessionsInWindow.get(tmux.windowId) ?? 0) + 1);
+    }
+    // A chosen name wins, then the name of a tmux window that holds only this
+    // session, then Claude's name for the folder.
     const corrected = sessions.map((session) => {
       const tmux = locations.get(session.sessionId) ?? null;
-      const windowName = tmux && !session.nameChosen ? windowNames.get(tmux.windowId) : undefined;
+      const windowName =
+        tmux && !session.nameChosen && sessionsInWindow.get(tmux.windowId) === 1
+          ? this.windowNames.get(tmux.windowId)
+          : undefined;
       return { ...session, tmux, name: windowName ?? session.name };
     });
     const byId = new Map(corrected.map((session) => [session.sessionId, session]));

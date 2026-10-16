@@ -80,7 +80,7 @@ describe('parseSessionFile', () => {
   });
 
   it('drops a headless run and marks a name the user chose', () => {
-    const base = { pid: 4, sessionId: 's', cwd: '/work', name: 'falk-3b' };
+    const base = { pid: 4, sessionId: 's', cwd: '/work', name: 'zeta-3b' };
     expect(
       parseSessionFile(JSON.stringify({ ...base, entrypoint: 'sdk-cli' }), configDir),
     ).toBeNull();

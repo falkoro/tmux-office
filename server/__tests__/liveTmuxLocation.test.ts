@@ -461,6 +461,64 @@ describe('live pane following', () => {
     expect([...renamed.values()][0]?.registryName).toBe('zeta');
   });
 
+  it('keeps the window name when a later pane list fails', async () => {
+    vi.useFakeTimers();
+    const office: TmuxPaneRecord = {
+      paneId: '%5',
+      panePid: PID,
+      session: 'work-3',
+      windowId: '@5',
+      windowName: 'office',
+    };
+    let calls = 0;
+    const store = new AgentStateStore();
+    runtime = new AgentRuntime(store, claudeProvider);
+    runtime.forceWatchAll = true;
+    runtime.startLiveSessionRegistry(writeSession(tempDir(), 'work-3:@5.%5'), () =>
+      Promise.resolve(calls++ === 0 ? [office] : null),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect([...store.values()][0]?.registryName).toBe('office');
+
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(calls).toBe(2);
+    expect([...store.values()][0]?.registryName).toBe('office');
+  });
+
+  it('keeps each name when several sessions share a tmux window', async () => {
+    vi.useFakeTimers();
+    const root = tempDir();
+    const registry = writeSession(root, 'work-3:@5.%5');
+    const sessionId = '22222222-2222-2222-2222-222222222222';
+    const cwd = path.join(root, 'work');
+    const projectDir = path.join(root, '.claude-work', 'projects', normalizeProjectPath(cwd));
+    fs.writeFileSync(path.join(projectDir, `${sessionId}.jsonl`), '{"type":"user"}\n');
+    fs.writeFileSync(
+      path.join(root, '.claude-work', 'sessions', '2.json'),
+      JSON.stringify({
+        pid: PID,
+        sessionId,
+        cwd,
+        tmux: 'work-3:@5.%6',
+        status: 'idle',
+        name: 'eta',
+      }),
+    );
+    const pane = { panePid: PID, session: 'work-3', windowId: '@5', windowName: 'office' };
+    const store = new AgentStateStore();
+    runtime = new AgentRuntime(store, claudeProvider);
+    runtime.forceWatchAll = true;
+    runtime.startLiveSessionRegistry(registry, () =>
+      Promise.resolve([
+        { ...pane, paneId: '%5' },
+        { ...pane, paneId: '%6' },
+      ]),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect([...store.values()].map((agent) => agent.registryName).sort()).toEqual(['eta', 'zeta']);
+  });
+
   it('shows a session the registry adopts under its working folder', async () => {
     vi.useFakeTimers();
     const registry = writeSession(tempDir(), 'work-3:@5.%5');
