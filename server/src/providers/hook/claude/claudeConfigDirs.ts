@@ -17,6 +17,14 @@ export function configDirGlobToRegExp(glob: string): RegExp {
   return new RegExp(`^${body}$`);
 }
 
+function realpathOrSelf(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return p;
+  }
+}
+
 function isDirectory(parent: string, entry: fs.Dirent, previous: readonly string[]): boolean {
   if (entry.isDirectory()) return true;
   if (!entry.isSymbolicLink()) return false;
@@ -65,7 +73,13 @@ export function listClaudeConfigDirs(
     dirs.splice(primaryIndex, 1);
     dirs.unshift(primary);
   }
-  return dirs;
+  const seen = new Set<string>();
+  return dirs.filter((dir) => {
+    const real = realpathOrSelf(dir);
+    if (seen.has(real)) return false;
+    seen.add(real);
+    return true;
+  });
 }
 
 /** `projects/` root under every config dir. Includes `~/.claude/projects`

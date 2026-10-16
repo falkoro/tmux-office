@@ -27,7 +27,9 @@ import {
   agentsMissingFrom,
   clearMissingTerminals,
   reconcileExistingAgents,
+  resetSurvivingStatus,
 } from '../src/office/engine/existingAgents.js';
+import { OfficeState } from '../src/office/engine/officeState.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -203,4 +205,23 @@ test('reconnect: a character missing from the terminal snapshot loses its pane a
 
 test('reconnect: an agent the snapshot no longer lists is closed, its sub-agents are left to it', () => {
   assert.deepEqual(agentsMissingFrom([1, 3, -1, 5], [1, 5, 7]), [3]);
+});
+
+test('reconnect: a surviving agent drops the status it showed before the drop', () => {
+  const os = new OfficeState();
+  os.addAgent(1);
+  os.addAgent(2);
+  os.setAgentTool(1, 'Bash');
+  os.setAgentActive(1, true);
+  os.showPermissionBubble(1);
+  os.showWaitingBubble(2);
+
+  resetSurvivingStatus(os, [1, 2]);
+
+  for (const id of [1, 2]) {
+    const ch = os.characters.get(id)!;
+    assert.equal(ch.isActive, false);
+    assert.equal(ch.currentTool, null);
+    assert.equal(ch.bubbleType, null);
+  }
 });

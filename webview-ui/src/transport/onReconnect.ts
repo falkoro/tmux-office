@@ -12,10 +12,13 @@ export function onReconnect(
   transport: Pick<MessageTransport, 'onStateChange' | 'send'>,
   handler: () => void,
 ): () => void {
+  let connected = false;
   let dropped = false;
   return transport.onStateChange((state) => {
-    if (state === TRANSPORT_STATE_RECONNECTING) dropped = true;
-    else if (state === TRANSPORT_STATE_CONNECTED && dropped) {
+    if (state === TRANSPORT_STATE_RECONNECTING) dropped = connected;
+    else if (state === TRANSPORT_STATE_CONNECTED) {
+      connected = true;
+      if (!dropped) return;
       dropped = false;
       transport.send({ type: 'webviewReady' });
       handler();

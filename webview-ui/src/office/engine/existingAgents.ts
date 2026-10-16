@@ -105,3 +105,26 @@ export function agentsMissingFrom(characterIds: Iterable<number>, incoming: numb
   const live = new Set(incoming);
   return [...characterIds].filter((id) => id > 0 && !live.has(id));
 }
+
+/** Structural view of OfficeState for clearing a surviving agent's status. */
+export interface StatusResetOffice {
+  characters: Map<number, { bubbleType: unknown; bubbleTimer: number }>;
+  setAgentActive: (id: number, active: boolean) => void;
+  setAgentTool: (id: number, tool: string | null) => void;
+}
+
+/**
+ * Agents a snapshot lists that are already on screen: drop the status they
+ * showed before the drop, since the snapshot's replay only re-sends what is
+ * still true.
+ */
+export function resetSurvivingStatus(os: StatusResetOffice, incoming: number[]): void {
+  for (const id of incoming) {
+    const ch = os.characters.get(id);
+    if (!ch) continue;
+    os.setAgentActive(id, false);
+    os.setAgentTool(id, null);
+    ch.bubbleType = null;
+    ch.bubbleTimer = 0;
+  }
+}

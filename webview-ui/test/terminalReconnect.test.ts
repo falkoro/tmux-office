@@ -47,4 +47,16 @@ describe('onReconnect', () => {
     emit(TRANSPORT_STATE_CONNECTED);
     expect(sent).toEqual(['webviewReady']);
   });
+
+  it('treats a first connect that failed and then succeeded as the first connect', () => {
+    const sent: string[] = [];
+    let fired = 0;
+    const { transport, emit } = fakeTransport((msg) => sent.push(msg.type));
+    onReconnect(transport, () => (fired += 1));
+    emit(TRANSPORT_STATE_CONNECTING);
+    emit(TRANSPORT_STATE_RECONNECTING);
+    emit(TRANSPORT_STATE_CONNECTED);
+    expect(sent).toEqual([]);
+    expect(fired).toBe(0);
+  });
 });

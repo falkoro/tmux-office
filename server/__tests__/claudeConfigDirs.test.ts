@@ -48,6 +48,13 @@ describe('claude config dirs', () => {
     expect(listClaudeConfigDirs(root).map((dir) => path.basename(dir))).toEqual(['.claude-link']);
   });
 
+  it('lists a symlinked alias of a config directory only once, keeping .claude', () => {
+    const root = home();
+    fs.mkdirSync(path.join(root, '.claude'));
+    fs.symlinkSync(path.join(root, '.claude'), path.join(root, '.claude-alt'), 'dir');
+    expect(listClaudeConfigDirs(root).map((dir) => path.basename(dir))).toEqual(['.claude']);
+  });
+
   it('returns an empty list when the home directory is missing', () => {
     expect(listClaudeConfigDirs(path.join(os.tmpdir(), 'pxl-missing-home-nope'))).toEqual([]);
   });

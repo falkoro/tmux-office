@@ -7,6 +7,7 @@ import {
   agentsMissingFrom,
   clearMissingTerminals,
   reconcileExistingAgents,
+  resetSurvivingStatus,
 } from '../office/engine/existingAgents.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import { setGhostHeadlessAgents as setRendererGhostHeadlessAgents } from '../office/engine/renderer.js';
@@ -197,6 +198,7 @@ export function useExtensionMessages(
   // agentToolsClear must NOT remove them — despawning and re-creating moved the
   // character to a new tile every turn. Cleared by subagentClear/agentClosed.
   const backgroundParentToolIdsRef = useRef<Record<number, Set<string>>>({});
+  const replayMutedRef = useRef<Set<number>>(new Set());
 
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
@@ -419,6 +421,8 @@ export function useExtensionMessages(
           saveAgentSeats(os);
         }
         for (const id of agentsMissingFrom(os.characters.keys(), incoming)) closeAgent(id);
+        resetSurvivingStatus(os, incoming);
+        replayMutedRef.current = new Set(incoming);
         setAgents([...incoming].sort((a, b) => a - b));
         setAgentTools({});
         setAgentStatuses({});
@@ -458,6 +462,7 @@ export function useExtensionMessages(
         });
         os.setAgentTool(id, toolName);
         os.setAgentActive(id, true);
+        replayMutedRef.current.delete(id);
         // Don't clear the permission bubble if the hook already confirmed permission is needed
         if (!permissionActive) {
           os.clearPermissionBubble(id);
@@ -569,9 +574,10 @@ export function useExtensionMessages(
           return { ...prev, [id]: status };
         });
         os.setAgentActive(id, status === 'active');
+        const replayed = replayMutedRef.current.delete(id);
         if (status === 'waiting') {
           os.showWaitingBubble(id, msg.awaitingInput === true);
-          playDoneSound();
+          if (!replayed) playDoneSound();
         }
       } else if (msg.type === 'agentToolPermission') {
         const id = msg.id as number;
