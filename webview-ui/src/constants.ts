@@ -386,6 +386,8 @@ export const OFFICE3D_PIXEL_RATIO_STEP = 0.25;
 /** Frame intervals that count as slow (step the pixel ratio down) and smooth (step it up). */
 export const OFFICE3D_SLOW_FRAME_MS = 28;
 export const OFFICE3D_SMOOTH_FRAME_MS = 18;
+/** Frame interval while only idle motion plays (typing, breathing, status beams); camera moves still get every frame. */
+export const OFFICE3D_AMBIENT_FRAME_MS = 33;
 export const OFFICE3D_STATS_INTERVAL_MS = 500;
 export const OFFICE3D_POLL_MS = 250;
 export const OFFICE3D_CLICK_SLOP_PX = 6;

@@ -34,6 +34,7 @@ import { LightProbeGenerator } from 'three/addons/lights/LightProbeGenerator.js'
 import { CSS2DObject, CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
 
 import {
+  OFFICE3D_AMBIENT_FRAME_MS,
   OFFICE3D_CAMERA_FOV,
   OFFICE3D_CAMERA_MAX_POLAR,
   OFFICE3D_CAMERA_MIN_DISTANCE,
@@ -1206,12 +1207,17 @@ export class OfficeScene {
     }
     this.countFrame(now);
 
-    if (tweening || moved || busy || (this.walking && this.moving())) {
+    if (tweening || moved || (this.walking && this.moving())) {
       this.raf = requestAnimationFrame(this.frame);
       return;
     }
     this.walkAt = 0;
     this.lastFrame = 0;
+    if (busy) {
+      // Agents at work never stop moving; drawing them at the monitor's full refresh rate kept the GPU loaded (and whining) nonstop.
+      this.timer = window.setTimeout(this.wake, OFFICE3D_AMBIENT_FRAME_MS);
+      return;
+    }
     let wake = Infinity;
     for (const desk of this.deskList) wake = Math.min(wake, desk.wakeIn(t, this.reduced));
     if (wake < Infinity) this.timer = window.setTimeout(this.wake, wake * 1000);
