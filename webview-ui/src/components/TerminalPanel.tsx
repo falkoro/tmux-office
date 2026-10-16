@@ -135,6 +135,7 @@ export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: Term
     const encoder = new TextEncoder();
     const queued: Uint8Array[] = [];
     let queuedBytes = 0;
+    let overflowed = false;
     socket.onopen = () => {
       for (const bytes of queued) socket.send(bytes);
       queued.length = 0;
@@ -142,12 +143,14 @@ export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: Term
     const input = term.onData((data) => {
       const bytes = encoder.encode(data);
       if (socket.readyState === WebSocket.OPEN) socket.send(bytes);
-      else if (
-        socket.readyState === WebSocket.CONNECTING &&
-        queuedBytes + bytes.length <= TERMINAL_QUEUED_INPUT_MAX_BYTES
-      ) {
-        queued.push(bytes);
-        queuedBytes += bytes.length;
+      else if (socket.readyState === WebSocket.CONNECTING && !overflowed) {
+        if (queuedBytes + bytes.length > TERMINAL_QUEUED_INPUT_MAX_BYTES) {
+          overflowed = true;
+          queued.length = 0;
+        } else {
+          queued.push(bytes);
+          queuedBytes += bytes.length;
+        }
       }
     });
 
