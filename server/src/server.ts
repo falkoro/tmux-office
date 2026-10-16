@@ -34,7 +34,7 @@ type HookEventCallback = (providerId: string, event: Record<string, unknown>) =>
  *
  * Routes (via Fastify in httpServer.ts):
  * - `POST /api/hooks/:providerId` -- hook event (auth required, 64KB body limit)
- * - `GET /api/health` -- health check (no auth)
+ * - `GET /api/health` -- health check (no auth unless Cloudflare Access is set)
  * - `GET /ws` -- WebSocket for real-time agent state (auth required)
  *
  * Discovery: writes `~/.pixel-agents/server.json` (legacy single-target pointer)

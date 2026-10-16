@@ -280,9 +280,11 @@ export function processTranscriptLine(
       const content = record.message?.content ?? record.content;
       // New user text prompt — new turn starting
       const userText = (text: string): void => {
-        cancelWaitingTimer(agentId, waitingTimers);
-        clearAgentActivity(agent, agentId, agents, permissionTimers);
         const local = localCommandRecord(text);
+        if (!local || !agent.isWaiting) {
+          cancelWaitingTimer(agentId, waitingTimers);
+          clearAgentActivity(agent, agentId, agents, permissionTimers);
+        }
         if (local === 'output' && !agent.isWaiting) {
           agent.isWaiting = true;
           agent.awaitingInput = false;

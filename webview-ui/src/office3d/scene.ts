@@ -366,6 +366,7 @@ export class DeskView {
     this.pickEl.addEventListener('change', () => {
       const kind = this.pickEl.value;
       if (isCharacterKind(kind)) ctx.choose(this.name, kind);
+      this.pickEl.blur();
     });
     this.card = new CSS2DObject(this.el);
     this.card.position.set(0, LABEL_Y, LABEL_Z);

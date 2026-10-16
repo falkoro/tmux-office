@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 
 import {
-  OFFICE3D_CREW_SCALE,
   OFFICE3D_DEPTH_FORESHORTEN,
   OFFICE3D_ROOM_PAD_FRONT,
   OFFICE3D_ROSTER_LINE_DEPTH,
@@ -265,7 +264,7 @@ describe('planOffice', () => {
       assert.ok(lead.overseer && crew.every((d) => !d.overseer));
       assert.equal(lead.x, p.x);
       assert.equal(lead.scale, 1);
-      assert.ok(crew.every((d) => d.scale === OFFICE3D_CREW_SCALE && d.z > lead.z));
+      assert.ok(crew.every((d) => d.scale === 0.6 && d.z > lead.z));
       assert.deepEqual(
         crew.map((d) => d.z),
         [crew[0].z, crew[0].z, crew[0].z],
@@ -310,9 +309,7 @@ describe('planOffice', () => {
       assert.ok(grid.every((r) => r.z - r.depth / 2 > porch.z + porch.depth / 2));
       assert.equal(porch.width, plan.width);
       assert.ok(porch.desks.every((d) => d.scale < 1));
-      assert.ok(
-        grid.every((r) => r.desks.every((d) => d.scale === (d.overseer ? 1 : OFFICE3D_CREW_SCALE))),
-      );
+      assert.ok(grid.every((r) => r.desks.every((d) => d.scale === (d.overseer ? 1 : 0.6))));
     }
   });
 
