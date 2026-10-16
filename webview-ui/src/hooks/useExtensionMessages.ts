@@ -2,12 +2,19 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { HooksConsentRequest, OfficeRooms } from '../../../core/src/messages.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
-import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
+import type {
+  ExistingAgentMeta,
+  PendingAgent,
+  ReplayMute,
+} from '../office/engine/existingAgents.js';
 import {
   agentsMissingFrom,
   clearMissingTerminals,
+  muteReplayedChimes,
+  permissionChimes,
   reconcileExistingAgents,
   resetSurvivingStatus,
+  statusChimes,
 } from '../office/engine/existingAgents.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import { setGhostHeadlessAgents as setRendererGhostHeadlessAgents } from '../office/engine/renderer.js';
@@ -198,7 +205,8 @@ export function useExtensionMessages(
   // agentToolsClear must NOT remove them — despawning and re-creating moved the
   // character to a new tile every turn. Cleared by subagentClear/agentClosed.
   const backgroundParentToolIdsRef = useRef<Record<number, Set<string>>>({});
-  const replayMutedRef = useRef<Set<number>>(new Set());
+  const waitingIdsRef = useRef<Set<number>>(new Set());
+  const replayMuteRef = useRef<ReplayMute>({ waiting: new Set(), permission: new Set() });
 
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
@@ -421,8 +429,11 @@ export function useExtensionMessages(
           saveAgentSeats(os);
         }
         for (const id of agentsMissingFrom(os.characters.keys(), incoming)) closeAgent(id);
+        replayMuteRef.current = muteReplayedChimes(os, incoming, waitingIdsRef.current);
+        waitingIdsRef.current = new Set();
         resetSurvivingStatus(os, incoming);
-        replayMutedRef.current = new Set(incoming);
+        for (const id of incoming) delete backgroundParentToolIdsRef.current[id];
+        setSubagentCharacters((prev) => prev.filter((s) => !incoming.includes(s.parentAgentId)));
         setAgents([...incoming].sort((a, b) => a - b));
         setAgentTools({});
         setAgentStatuses({});
@@ -462,7 +473,6 @@ export function useExtensionMessages(
         });
         os.setAgentTool(id, toolName);
         os.setAgentActive(id, true);
-        replayMutedRef.current.delete(id);
         // Don't clear the permission bubble if the hook already confirmed permission is needed
         if (!permissionActive) {
           os.clearPermissionBubble(id);
@@ -574,11 +584,11 @@ export function useExtensionMessages(
           return { ...prev, [id]: status };
         });
         os.setAgentActive(id, status === 'active');
-        const replayed = replayMutedRef.current.delete(id);
-        if (status === 'waiting') {
-          os.showWaitingBubble(id, msg.awaitingInput === true);
-          if (!replayed) playDoneSound();
-        }
+        if (status === 'waiting') waitingIdsRef.current.add(id);
+        else waitingIdsRef.current.delete(id);
+        const chime = statusChimes(replayMuteRef.current, id, status);
+        if (status === 'waiting') os.showWaitingBubble(id, msg.awaitingInput === true);
+        if (chime) playDoneSound();
       } else if (msg.type === 'agentToolPermission') {
         const id = msg.id as number;
         setAgentTools((prev) => {
@@ -590,7 +600,7 @@ export function useExtensionMessages(
           };
         });
         os.showPermissionBubble(id);
-        playPermissionSound();
+        if (permissionChimes(replayMuteRef.current, id)) playPermissionSound();
       } else if (msg.type === 'subagentToolPermission') {
         const id = msg.id as number;
         const parentToolId = msg.parentToolId as string;

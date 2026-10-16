@@ -39,6 +39,19 @@ describe('resolveLiveTmuxLocations', () => {
     expect(locations.get('s1')).toEqual({ session: 'work-5', windowId: '@9', paneId: '%5' });
   });
 
+  it('keeps the registry session when a grouped session also lists the pane', () => {
+    const view: TmuxPaneRecord = { paneId: '%5', session: 'view', windowId: '@5' };
+    const own: TmuxPaneRecord = { paneId: '%5', session: 'work-3', windowId: '@5' };
+    expect(resolveLiveTmuxLocations(sessions, [own, view]).get('s1')).toEqual(registryTmux);
+    expect(resolveLiveTmuxLocations(sessions, [view, own]).get('s1')).toEqual(registryTmux);
+  });
+
+  it('takes the first listing when no grouped session is the registry one', () => {
+    const view: TmuxPaneRecord = { paneId: '%5', session: 'view', windowId: '@9' };
+    const locations = resolveLiveTmuxLocations(sessions, [movedPane, view]);
+    expect(locations.get('s1')).toEqual({ session: 'work-5', windowId: '@9', paneId: '%5' });
+  });
+
   it('clears the location when the pane is gone', () => {
     const locations = resolveLiveTmuxLocations(sessions, [
       { paneId: '%9', session: 'work-5', windowId: '@9' },

@@ -26,8 +26,11 @@ import type {
 import {
   agentsMissingFrom,
   clearMissingTerminals,
+  muteReplayedChimes,
+  permissionChimes,
   reconcileExistingAgents,
   resetSurvivingStatus,
+  statusChimes,
 } from '../src/office/engine/existingAgents.js';
 import { OfficeState } from '../src/office/engine/officeState.js';
 
@@ -224,4 +227,44 @@ test('reconnect: a surviving agent drops the status it showed before the drop', 
     assert.equal(ch.currentTool, null);
     assert.equal(ch.bubbleType, null);
   }
+});
+
+test('reconnect: a surviving agent loses its sub-agents until the replay recreates the live ones', () => {
+  const os = new OfficeState();
+  os.addAgent(1);
+  os.addSubagent(1, 'toolu_finished');
+
+  resetSurvivingStatus(os, [1]);
+
+  assert.equal(os.getSubagentId(1, 'toolu_finished'), null);
+});
+
+test('reconnect: only the replay of a chime the user already heard is muted', () => {
+  const os = new OfficeState();
+  for (const id of [1, 2, 3]) os.addAgent(id);
+  os.showPermissionBubble(3);
+  // Agent 1 was waiting; 2 was mid-turn; 3 was asking for permission.
+  const mute = muteReplayedChimes(os, [1, 2, 3], new Set([1]));
+  resetSurvivingStatus(os, [1, 2, 3]);
+
+  assert.equal(statusChimes(mute, 1, 'waiting'), false, 'replayed waiting of agent 1');
+  assert.equal(statusChimes(mute, 1, 'active'), false);
+  assert.equal(statusChimes(mute, 1, 'waiting'), true, 'agent 1 finishes its next turn');
+
+  assert.equal(statusChimes(mute, 2, 'waiting'), true, 'agent 2 finishes the turn it was in');
+
+  assert.equal(permissionChimes(mute, 3), false, 'replayed permission of agent 3');
+  assert.equal(permissionChimes(mute, 3), true, 'agent 3 asks again');
+  assert.equal(permissionChimes(mute, 1), true, 'agent 1 asks for the first time');
+});
+
+test('reconnect: an agent status releases a permission mute the replay never spent', () => {
+  const os = new OfficeState();
+  os.addAgent(1);
+  os.showPermissionBubble(1);
+  const mute = muteReplayedChimes(os, [1], new Set());
+  resetSurvivingStatus(os, [1]);
+
+  assert.equal(statusChimes(mute, 1, 'waiting'), true);
+  assert.equal(permissionChimes(mute, 1), true);
 });

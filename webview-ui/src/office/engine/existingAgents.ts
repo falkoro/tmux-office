@@ -111,12 +111,13 @@ export interface StatusResetOffice {
   characters: Map<number, { bubbleType: unknown; bubbleTimer: number }>;
   setAgentActive: (id: number, active: boolean) => void;
   setAgentTool: (id: number, tool: string | null) => void;
+  removeAllSubagents: (parentAgentId: number) => void;
 }
 
 /**
- * Agents a snapshot lists that are already on screen: drop the status they
- * showed before the drop, since the snapshot's replay only re-sends what is
- * still true.
+ * Agents a snapshot lists that are already on screen: drop the status and the
+ * sub-agents they showed before the drop, since the snapshot's replay only
+ * re-sends what is still true and recreates the live sub-agents.
  */
 export function resetSurvivingStatus(os: StatusResetOffice, incoming: number[]): void {
   for (const id of incoming) {
@@ -124,7 +125,44 @@ export function resetSurvivingStatus(os: StatusResetOffice, incoming: number[]):
     if (!ch) continue;
     os.setAgentActive(id, false);
     os.setAgentTool(id, null);
+    os.removeAllSubagents(id);
     ch.bubbleType = null;
     ch.bubbleTimer = 0;
   }
+}
+
+/**
+ * Chimes a reconnect's replay would play a second time: the waiting chime of
+ * agents that were already waiting, the permission chime of agents that
+ * already showed the permission bubble.
+ */
+export interface ReplayMute {
+  waiting: Set<number>;
+  permission: Set<number>;
+}
+
+/** Arm the mute from what the surviving agents showed. Call before resetSurvivingStatus. */
+export function muteReplayedChimes(
+  os: StatusResetOffice,
+  incoming: number[],
+  waitingIds: ReadonlySet<number>,
+): ReplayMute {
+  return {
+    waiting: new Set(incoming.filter((id) => waitingIds.has(id))),
+    permission: new Set(
+      incoming.filter((id) => os.characters.get(id)?.bubbleType === 'permission'),
+    ),
+  };
+}
+
+/** An agentStatus arrived: whether it chimes. Its first one releases the agent's mutes. */
+export function statusChimes(mute: ReplayMute, id: number, status: string): boolean {
+  const replayed = mute.waiting.delete(id);
+  mute.permission.delete(id);
+  return status === 'waiting' && !replayed;
+}
+
+/** An agentToolPermission arrived: whether it chimes. Its first one releases the mute. */
+export function permissionChimes(mute: ReplayMute, id: number): boolean {
+  return !mute.permission.delete(id);
 }

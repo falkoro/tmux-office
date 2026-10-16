@@ -294,16 +294,19 @@ function deskLabels(rooms: RoomModel[], overseers: readonly string[]): void {
       });
     }
   }
-  const seen = new Map<string, number>();
-  const whole = new Map<string, number>();
-  for (const [desk, text] of short) {
-    seen.set(text, (seen.get(text) ?? 0) + 1);
-    whole.set(spaced(desk.name), (whole.get(spaced(desk.name)) ?? 0) + 1);
+  // Clashing short labels take the spaced whole name, then clashing spaced names the raw name.
+  for (;;) {
+    const seen = new Map<string, number>();
+    for (const text of short.values()) seen.set(text, (seen.get(text) ?? 0) + 1);
+    const clashing = [...short].filter(([desk, text]) => seen.get(text)! > 1 && text !== desk.name);
+    const shortest = clashing.filter(([desk, text]) => text !== spaced(desk.name));
+    const bump = shortest.length > 0 ? shortest : clashing;
+    if (bump.length === 0) break;
+    for (const [desk, text] of bump) {
+      short.set(desk, text === spaced(desk.name) ? desk.name : spaced(desk.name));
+    }
   }
-  for (const [desk, text] of short) {
-    if (seen.get(text) === 1) desk.label = text;
-    else desk.label = whole.get(spaced(desk.name)) === 1 ? spaced(desk.name) : desk.name;
-  }
+  for (const [desk, text] of short) desk.label = text;
 }
 
 function spaced(name: string): string {

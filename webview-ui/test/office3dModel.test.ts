@@ -396,6 +396,25 @@ describe('deriveOffice', () => {
     );
   });
 
+  test('a whole name taken to break a clash never matches another card', () => {
+    const names = ['api-0a', 'api-0b', 'api-0a-ff'];
+    const chars = names.map((_, i) => char(i + 1, { tmux: pane(`work-${i}`, `@${i}`) }));
+    const terminals: Record<number, TerminalMeta> = Object.fromEntries(
+      names.map((name, i) => [i + 1, { name, tmux: chars[i].tmux ?? null }]),
+    );
+    const labels = deriveOffice(chars, terminals, {}, cfg([], [], true, []))
+      .flatMap((room) => room.pods.flatMap((pod) => pod.desks))
+      .map((d) => [d.name, d.label] as const);
+    assert.deepEqual(
+      new Map(labels),
+      new Map([
+        ['api-0a', 'api 0a'],
+        ['api-0b', 'api 0b'],
+        ['api-0a-ff', 'api 0a ff'],
+      ]),
+    );
+  });
+
   test('agents without a pane share one pod, last in the background', () => {
     const rooms = deriveOffice(
       [char(3), char(2, { tmux: pane('scratch') }), char(1)],

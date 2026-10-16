@@ -83,7 +83,11 @@ import type {
   PoseOptions,
 } from './characters.js';
 import {
+  CHARACTER_HEAD_HALF,
+  CHARACTER_HEAD_Y,
+  CHARACTER_HIP_Y,
   CHARACTER_KINDS,
+  CHARACTER_SEAT_HEIGHT,
   CharacterKit,
   characterLabel,
   characterMoving,
@@ -156,6 +160,9 @@ const LABEL_Z = 0.5;
 const BADGE_SEATED_Y = 1.4;
 const BADGE_STANDING_Y = 1.85;
 const HELPER_BADGE_Y = 1.45;
+/** A seated full-size character's crown above the floor: the top of what a desk hides. */
+const SEATED_CROWN_Y =
+  CHARACTER_SEAT_HEIGHT + (CHARACTER_HEAD_Y - CHARACTER_HIP_Y) + CHARACTER_HEAD_HALF;
 /** Tallest thing a camera fit keeps in view: the back walls and their labels. */
 const FIT_HEIGHT = OFFICE3D_WALL_HEIGHT + 0.4;
 
@@ -292,6 +299,8 @@ interface HelperView {
 export class DeskView {
   readonly group = new Group();
   readonly hit = new Box3();
+  /** What this desk hides from eye level: the click box, cut off at the seated crown. */
+  readonly sightBlock = new Box3();
   readonly agentId: number;
   name: string;
   status: DeskStatus | null = null;
@@ -378,6 +387,8 @@ export class DeskView {
       V.set(spot.x, FLOOR + 0.75 * s, spot.z - 0.1 * s),
       V2.set(1.5 * s, 1.5 * s, 1.4 * s),
     );
+    this.sightBlock.copy(this.hit);
+    this.sightBlock.max.y = FLOOR + SEATED_CROWN_Y * s;
     this.placeHelpers();
   }
 
@@ -386,7 +397,7 @@ export class DeskView {
     camera.getWorldDirection(V2);
     const depth = V.setFromMatrixPosition(this.group.matrixWorld).sub(camera.position).dot(V2);
     // Behind the camera, CSS2D projects the card onto the view and it covers the picture.
-    const hidden = depth <= 0 || !!screened?.(this.card.getWorldPosition(V), this.hit);
+    const hidden = depth <= 0 || !!screened?.(this.card.getWorldPosition(V), this.sightBlock);
     const visibility = hidden ? 'hidden' : '';
     for (const node of [this.el, this.badgeEl, ...this.helperList.map((h) => h.badgeEl)]) {
       if (node.style.visibility !== visibility) node.style.visibility = visibility;
@@ -1463,9 +1474,9 @@ export class OfficeScene {
     // ponytail: only desks block labels, not walls or furniture; depth-tested sprite labels would cover those.
     return this.deskList.some(
       (d) =>
-        d.hit !== own &&
-        !d.hit.containsPoint(ray.origin) &&
-        ray.intersectBox(d.hit, this.hitPoint) !== null &&
+        d.sightBlock !== own &&
+        !d.sightBlock.containsPoint(ray.origin) &&
+        ray.intersectBox(d.sightBlock, this.hitPoint) !== null &&
         this.hitPoint.distanceTo(ray.origin) < dist,
     );
   };
@@ -1516,8 +1527,10 @@ export class OfficeScene {
 
   // A click must not count as steering, or the first pick would freeze the fit.
   private readonly onPointerDown = (e: PointerEvent): void => {
-    if (this.walking && this.down && this.renderer.domElement.hasPointerCapture(this.down.id))
+    if (this.walking && this.down && this.renderer.domElement.hasPointerCapture(this.down.id)) {
+      this.down.dragged = true;
       return;
+    }
     if (!this.walking && this.down && this.down.id !== e.pointerId) {
       this.down.dragged = true;
       this.takeOver();

@@ -7,7 +7,9 @@ import { isSafeTmuxLocation, type TmuxPaneRecord } from './tmuxTerminal.js';
  * `panes === null` means the listing failed or has not arrived: keep each
  * session's registry location. An empty list is a successful read, so a pane
  * id that is absent becomes null. A listed pane keeps its id and takes the
- * session and window tmux reports now. Unsafe names become null.
+ * session and window tmux reports now. A pane listed under several sessions
+ * (a grouped session) keeps the registry's session if it is one of them, else
+ * the first listing. Unsafe names become null.
  */
 export function resolveLiveTmuxLocations(
   sessions: readonly { sessionId: string; tmux: TmuxLocation | null }[],
@@ -21,9 +23,11 @@ export function resolveLiveTmuxLocations(
     return resolved;
   }
 
-  const byPane = new Map<string, TmuxPaneRecord>();
+  const byPane = new Map<string, TmuxPaneRecord[]>();
   for (const pane of panes) {
-    byPane.set(pane.paneId, pane);
+    const listings = byPane.get(pane.paneId);
+    if (listings) listings.push(pane);
+    else byPane.set(pane.paneId, [pane]);
   }
 
   for (const session of sessions) {
@@ -32,7 +36,8 @@ export function resolveLiveTmuxLocations(
       resolved.set(session.sessionId, null);
       continue;
     }
-    const found = byPane.get(current.paneId);
+    const listings = byPane.get(current.paneId);
+    const found = listings?.find((pane) => pane.session === current.session) ?? listings?.[0];
     if (!found) {
       resolved.set(session.sessionId, null);
       continue;

@@ -9,10 +9,10 @@ import type { MessageTransport } from './types.js';
  * for a fresh snapshot and calls `handler`.
  */
 export function onReconnect(
-  transport: Pick<MessageTransport, 'onStateChange' | 'send'>,
+  transport: Pick<MessageTransport, 'onStateChange' | 'send' | 'state'>,
   handler: () => void,
 ): () => void {
-  let connected = false;
+  let connected = transport.state === TRANSPORT_STATE_CONNECTED;
   let dropped = false;
   return transport.onStateChange((state) => {
     if (state === TRANSPORT_STATE_RECONNECTING) dropped = connected;
