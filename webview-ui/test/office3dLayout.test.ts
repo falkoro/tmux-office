@@ -15,8 +15,6 @@ import { BACKGROUND_ROOM_ID, NO_PANE_POD_ID } from '../src/office3d/model.js';
 
 const DESKTOP = 1600 / 900;
 const PHONE = 390 / 844;
-/** docs/office3d.md: a wide stage's name list has one column per 5 m of room width. */
-const wideColumns = (width: number) => Math.max(1, Math.floor(width / 5));
 
 let nextId = 1;
 function pod(id: string, desks: number, pinned = false): PodModel {
@@ -349,9 +347,11 @@ describe('planOffice', () => {
       DESKTOP,
     );
     const porch = plan.rooms[1];
-    const lines = Math.ceil(porch.desks.length / wideColumns(porch.width));
+    // 15 to 20 m wide holds three 5 m names per line: 6 names take 2 lines.
+    assert.ok(porch.width >= 15 && porch.width < 20, `${porch.width} m`);
+    assert.equal(porchRosterColumns(porch.width), 3);
     const floor = porch.z + porch.depth / 2 - Math.max(...porch.desks.map((d) => d.z));
-    assert.ok(floor >= lines * OFFICE3D_ROSTER_LINE_DEPTH);
+    assert.ok(floor >= 2 * OFFICE3D_ROSTER_LINE_DEPTH);
   });
 
   test('the porch alone sits at the origin', () => {

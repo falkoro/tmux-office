@@ -491,9 +491,15 @@ describe('live-only', () => {
     expect(planted.store.size).toBe(1);
   });
 
-  it('ends as one agent for the new session id when the registry session is replaced', async () => {
+  it('keeps the same agent and pane when /clear replaces its session with hooks off', async () => {
     vi.useFakeTimers();
     const planted = plant(true);
+    planted.runtime.hooksEnabled.current = false;
+    const agent = [...planted.store.values()][0]!;
+    const tmuxBefore = agent.tmux;
+    const lifecycle: string[] = [];
+    planted.store.on('agentAdded', (id) => lifecycle.push(`added ${id}`));
+    planted.store.on('agentRemoved', (id) => lifecycle.push(`removed ${id}`));
     const nextSession = '22222222-2222-2222-2222-222222222222';
     const nextJsonl = path.join(planted.projectDir, `${nextSession}.jsonl`);
     fs.writeFileSync(nextJsonl, '{"type":"user"}\n');
@@ -509,10 +515,14 @@ describe('live-only', () => {
       }),
     );
     await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
-    const agents = [...planted.store.values()];
-    expect(agents.map((agent) => agent.sessionId)).toEqual([nextSession]);
-    expect(planted.runtime.dismissalTracker.isDismissed(nextJsonl)).toBe(false);
-    expect(planted.runtime.dismissalTracker.isPermanentlyDismissed(planted.jsonl)).toBe(false);
+    expect(lifecycle).toEqual([]);
+    expect([...planted.store.keys()]).toEqual([agent.id]);
+    expect(planted.store.get(agent.id)?.sessionId).toBe(nextSession);
+    expect(planted.store.get(agent.id)?.jsonlFile).toBe(nextJsonl);
+    expect(planted.store.get(agent.id)?.tmux).toEqual(tmuxBefore);
+
+    await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
+    expect(lifecycle).toEqual([]);
   });
 
   it('keeps an agent whose session id was already reassigned to the new registry session', async () => {

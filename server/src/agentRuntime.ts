@@ -251,28 +251,8 @@ export class AgentRuntime {
           (agent) => this.registerAgent(agent.sessionId, agent.id),
         );
       },
-      onSessionClear: (agentId, newSessionId, newTranscriptPath) => {
-        if (newTranscriptPath) {
-          this.knownJsonlFiles.add(newTranscriptPath);
-          reassignAgentToFile(
-            agentId,
-            newTranscriptPath,
-            this.store,
-            this.fileWatchers,
-            this.pollingTimers,
-            this.waitingTimers,
-            this.permissionTimers,
-            () => this.store.persist(),
-          );
-        }
-        const agent = this.store.get(agentId);
-        if (agent) {
-          this.unregisterAgent(agent.sessionId);
-          if (agent.sessionId !== newSessionId) agent.clearedFromSessionId = agent.sessionId;
-          agent.sessionId = newSessionId;
-          this.registerAgent(agent.sessionId, agent.id);
-        }
-      },
+      onSessionClear: (agentId, newSessionId, newTranscriptPath) =>
+        this.moveAgentToSession(agentId, newSessionId, newTranscriptPath),
       onSessionResume: (transcriptPath) => {
         this.dismissalTracker.clearDismissal(transcriptPath);
         this.dismissalTracker.clearSeededMtime(transcriptPath);
@@ -331,6 +311,35 @@ export class AgentRuntime {
   }
 
   /** Register an agent with the hook event handler for session->agent mapping. */
+  /** /clear or /resume: the agent continues in `newSessionId`, keeping its id, seat and terminal. */
+  private moveAgentToSession(
+    agentId: number,
+    newSessionId: string,
+    newTranscriptPath: string | undefined,
+  ): void {
+    const previous = this.store.get(agentId)?.sessionId;
+    if (previous === undefined) return;
+    if (newTranscriptPath) {
+      this.knownJsonlFiles.add(newTranscriptPath);
+      reassignAgentToFile(
+        agentId,
+        newTranscriptPath,
+        this.store,
+        this.fileWatchers,
+        this.pollingTimers,
+        this.waitingTimers,
+        this.permissionTimers,
+        () => this.store.persist(),
+      );
+    }
+    const agent = this.store.get(agentId);
+    if (!agent) return;
+    this.unregisterAgent(previous);
+    if (previous !== newSessionId) agent.clearedFromSessionId = previous;
+    agent.sessionId = newSessionId;
+    this.registerAgent(agent.sessionId, agent.id);
+  }
+
   registerAgent(sessionId: string, agentId: number): void {
     this.hookEventHandler.registerAgent(sessionId, agentId);
   }
@@ -562,6 +571,9 @@ export class AgentRuntime {
       tmux: locations.get(session.sessionId) ?? null,
     }));
     const byId = new Map(corrected.map((session) => [session.sessionId, session]));
+    for (const session of corrected) {
+      this.followSessionSwitch(session, byId);
+    }
     syncLiveSessionMetadata(this.store, { get: (sessionId) => byId.get(sessionId) });
     for (const session of corrected) {
       this.adoptLiveSession(session);
@@ -574,8 +586,9 @@ export class AgentRuntime {
    * Children stay while their lead stays, and leave with the lead. A child
    * whose lead is gone is judged by its own session. An agent moved by /clear
    * stays while the registry still shows the session it was moved from, until
-   * the registry has shown its new one, and stays while /clear moves it.
-   * The transcript is not dismissed: a new pid with the same session id
+   * the registry has shown its new one. An agent whose hooks reported /clear
+   * stays until its SessionStart moves it; without hooks the tick moves it
+   * first (see followSessionSwitch). The transcript is not dismissed: a new pid with the same session id
    * must be adopted on a later tick.
    */
   private removeSessionsThatLeft(registry: ClaudeSessionRegistry): void {
@@ -598,8 +611,46 @@ export class AgentRuntime {
     }
   }
 
-  private adoptLiveSession(session: LiveClaudeSession): void {
+  /** Transcript of a registry session that no agent tracks or is about to claim and the user did not dismiss. */
+  private untrackedTranscript(session: LiveClaudeSession): string | null {
     const jsonlFile = transcriptPathForSession(session);
+    if (!jsonlFile) return null;
+    const projectDir = path.dirname(jsonlFile);
+    for (const agent of this.store.values()) {
+      if (agent.sessionId === session.sessionId || pathsMatch(agent.jsonlFile, jsonlFile)) {
+        return null;
+      }
+      if (agent.pendingClear && pathsMatch(agent.projectDir, projectDir)) return null;
+    }
+    if (this.dismissalTracker.isDismissed(jsonlFile)) return null;
+    if (this.dismissalTracker.isPermanentlyDismissed(jsonlFile)) return null;
+    return jsonlFile;
+  }
+
+  /**
+   * Without hooks, /clear and /resume show only as the registry listing a new
+   * session under the pid of an agent whose session left. Move that agent
+   * instead of letting the new session adopt a second one. Agents fed by
+   * hooks are moved by their SessionStart.
+   */
+  private followSessionSwitch(
+    session: LiveClaudeSession,
+    live: ReadonlyMap<string, LiveClaudeSession>,
+  ): void {
+    const agent = [...this.store.values()].find(
+      (a) =>
+        a.livePid === session.pid &&
+        a.leadAgentId === undefined &&
+        !a.hookDelivered &&
+        !live.has(a.sessionId),
+    );
+    if (!agent) return;
+    const jsonlFile = this.untrackedTranscript(session);
+    if (jsonlFile) this.moveAgentToSession(agent.id, session.sessionId, jsonlFile);
+  }
+
+  private adoptLiveSession(session: LiveClaudeSession): void {
+    const jsonlFile = this.untrackedTranscript(session);
     if (!jsonlFile) return;
     const projectDir = path.dirname(jsonlFile);
     const watching =
@@ -608,12 +659,6 @@ export class AgentRuntime {
       this.watchAllSessions.current ||
       isTrackedProjectDir(projectDir);
     if (!watching) return;
-    for (const agent of this.store.values()) {
-      if (agent.sessionId === session.sessionId || pathsMatch(agent.jsonlFile, jsonlFile)) return;
-      if (agent.pendingClear && pathsMatch(agent.projectDir, projectDir)) return;
-    }
-    if (this.dismissalTracker.isDismissed(jsonlFile)) return;
-    if (this.dismissalTracker.isPermanentlyDismissed(jsonlFile)) return;
 
     this.knownJsonlFiles.add(jsonlFile);
     this.dismissalTracker.clearSeededMtime(jsonlFile);
