@@ -33,7 +33,6 @@ export function clearAgentActivity(
 
   agent.isWaiting = false;
   agent.awaitingInput = false;
-  agent.midTurn = true;
   agent.permissionSent = false;
   cancelPermissionTimer(agentId, permissionTimers);
   agents.broadcast({ type: 'agentToolsClear', id: agentId });

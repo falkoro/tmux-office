@@ -38,14 +38,18 @@ const rooms = {
 describe('OfficeFeedState', () => {
   it('reads unseen agents from server state', () => {
     const { feed } = setup(
-      agent(1, 'a', { isWaiting: false }),
+      agent(1, 'a', { isWaiting: false, midTurn: true }),
       agent(2, 'b', { permissionSent: true }),
       agent(3, 'c'),
+      agent(4, 'd', { awaitingInput: true }),
+      agent(5, 'e', { isWaiting: false }),
     );
     expect(feed.snapshot(null).desks.map((d) => d.status)).toEqual([
       'working',
       'needs-permission',
       'done',
+      'waiting-input',
+      'idle',
     ]);
   });
 
@@ -148,7 +152,7 @@ describe('OfficeFeedState', () => {
     store.delete(1);
     // A delayed broadcast for the removed agent must not bring its desk back.
     store.broadcast({ type: 'agentToolPermission', id: 1 });
-    store.set(1, agent(1, 'a', { isWaiting: false }));
+    store.set(1, agent(1, 'a', { isWaiting: false, midTurn: true }));
     expect(feed.snapshot(null).desks.map((d) => d.status)).toEqual(['working']);
   });
 });
@@ -161,7 +165,7 @@ describe('GET /api/office', () => {
   });
 
   async function start(officeEmbedOrigins: string[]) {
-    const { store, feed } = setup(agent(1, 'work-8', { isWaiting: false }));
+    const { store, feed } = setup(agent(1, 'work-8', { isWaiting: false, midTurn: true }));
     handle = await createHttpServer({
       embedded: true,
       host: '127.0.0.1',

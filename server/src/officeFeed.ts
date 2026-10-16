@@ -204,6 +204,7 @@ export class OfficeFeedState {
 function seed(agent: AgentState | undefined): StatusInput {
   return {
     bubbleType: agent?.permissionSent ? 'permission' : agent?.isWaiting ? 'waiting' : null,
-    isActive: !(agent?.isWaiting ?? false),
+    waitingAwaitingInput: agent?.awaitingInput === true,
+    isActive: agent?.midTurn === true,
   };
 }

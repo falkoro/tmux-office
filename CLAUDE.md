@@ -160,12 +160,9 @@ webview-ui/                          npm workspace
 
 ## Distribution
 
-Two artifacts from one source tree:
+This fork publishes nothing: it is not on the VS Code Marketplace, Open VSX or npm. It runs from source — `npm run build`, then `node dist/cli.js [--port 3100]` serves the Fastify server and the SPA on the same port. The VS Code extension builds from the same tree (`dist/extension.js`, F5 for the Extension Development Host).
 
-- **VS Code extension** (`.vsix`) — `pablodelucca.pixel-agents` on VS Code Marketplace and Open VSX. Bundles VS Code adapter + webview SPA + assets + hook scripts.
-- **npm package** (`pixel-agents`) — `npx pixel-agents [--port 3100]` runs the Fastify server and serves the SPA on the same port. Bundles CLI + webview SPA + assets + hook scripts + `core/asyncapi.yaml` (so third-party clients can regenerate from it).
-
-`package.json:files` allowlist controls the npm tarball: `dist/cli.js{,.map}`, `dist/webview/`, `dist/assets/`, `dist/hooks/`, `core/asyncapi.yaml`, `icon.png`. `dist/extension.js` is intentionally excluded since the VS Code entry ships through the `.vsix`.
+`package.json` keeps the upstream package name (`pixel-agents`) and extension id (`pablodelucca.pixel-agents`), along with its `files` allowlist, only so the code stays mergeable with upstream.
 
 ## Communication Flow
 
@@ -643,7 +640,7 @@ Supporting: `wall-tile-editor.html` (wall sprite editing), `jsonl-viewer.html` (
 
 ## Project Identity
 
-- Extension ID: `pablodelucca.pixel-agents` (VS Code Marketplace + Open VSX)
-- npm package: `pixel-agents` (CLI bin: `pixel-agents`)
+- Not published to the VS Code Marketplace, Open VSX or npm; runs from source (`npm run build`, then `node dist/cli.js`)
+- `package.json` keeps the upstream package name `pixel-agents` and extension id `pablodelucca.pixel-agents` only to stay mergeable with upstream
 - GitHub: `https://github.com/falkoro/tmux-office`, built on `https://github.com/pixel-agents-hq/pixel-agents`
 - License: MIT

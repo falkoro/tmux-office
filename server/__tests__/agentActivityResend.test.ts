@@ -1,7 +1,12 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 
 import { resendAgentActivity } from '../src/agentActivityResend.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
+import { DismissalTracker } from '../src/dismissalTracker.js';
+import { reassignAgentToFile, setDismissalTracker } from '../src/fileWatcher.js';
 import { HookEventHandler } from '../src/hookEventHandler.js';
 import { claudeProvider } from '../src/providers/hook/claude/claude.js';
 import { SessionRouter } from '../src/sessionRouter.js';
@@ -78,6 +83,52 @@ describe('resendAgentActivity', () => {
     });
     expect(live).toEqual({ type: 'agentStatus', id: 1, status: 'active' });
     expect(replayed).toEqual(live);
+  });
+
+  it('replays no active status after /clear follows a finished turn', () => {
+    const { replayed } = liveAndReplayedStatus((store) => {
+      for (const record of [
+        { type: 'user', message: { content: 'task' } },
+        { type: 'system', subtype: 'turn_duration' },
+        {
+          type: 'user',
+          message: {
+            content: '<command-name>/clear</command-name>\n<command-args></command-args>',
+          },
+        },
+      ]) {
+        processTranscriptLine(1, JSON.stringify(record), store, new Map(), new Map());
+      }
+    });
+    expect(replayed).toBeUndefined();
+  });
+
+  it('replays no active status for an agent moved to its /clear transcript', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-resend-'));
+    const pollingTimers = new Map<number, ReturnType<typeof setInterval>>();
+    try {
+      const next = path.join(dir, 'next.jsonl');
+      fs.writeFileSync(next, '');
+      setDismissalTracker(new DismissalTracker());
+      const { replayed } = liveAndReplayedStatus((store) => {
+        const prompt = JSON.stringify({ type: 'user', message: { content: 'task' } });
+        processTranscriptLine(1, prompt, store, new Map(), new Map());
+        reassignAgentToFile(
+          1,
+          next,
+          store,
+          new Map(),
+          pollingTimers,
+          new Map(),
+          new Map(),
+          () => {},
+        );
+      });
+      expect(replayed).toBeUndefined();
+    } finally {
+      for (const timer of pollingTimers.values()) clearInterval(timer);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('sends messages in order: team info, tools, waiting, context', () => {

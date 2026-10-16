@@ -111,6 +111,19 @@ test('layout not ready: buffers restored agents for the later layoutLoaded flush
   ]);
 });
 
+test('layout not ready: a reconnect snapshot drops buffered agents it no longer lists', () => {
+  const os = fakeOffice();
+  const pending: PendingAgent[] = [];
+
+  reconcileExistingAgents(os, [5, 6], {}, {}, false, pending);
+  reconcileExistingAgents(os, [6], {}, {}, false, pending);
+
+  assert.deepEqual(
+    pending.map((p) => p.id),
+    [6],
+  );
+});
+
 // ── idempotence / dedup ─────────────────────────────────────────
 
 test('layout ready: skips an agent that already exists and reports nothing added', () => {

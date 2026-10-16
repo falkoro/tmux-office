@@ -401,12 +401,14 @@ export function processTranscriptLine(
           // New user text prompt — new turn starting
           cancelWaitingTimer(agentId, waitingTimers);
           clearAgentActivity(agent, agentId, agents, permissionTimers);
+          agent.midTurn = true;
           agent.hadToolsInTurn = false;
         }
       } else if (typeof content === 'string' && content.trim()) {
         // New user text prompt — new turn starting
         cancelWaitingTimer(agentId, waitingTimers);
         clearAgentActivity(agent, agentId, agents, permissionTimers);
+        agent.midTurn = !content.includes('/clear</command-name>');
         agent.hadToolsInTurn = false;
       }
     } else if (record.type === 'queue-operation' && record.operation === 'enqueue') {

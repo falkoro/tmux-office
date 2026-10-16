@@ -2,7 +2,7 @@ import type { Box3 } from 'three';
 import { Group, Vector3 } from 'three';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 
-import { OFFICE3D_WALK_EYE_Y } from '../src/constants.js';
+import { OFFICE3D_WALK_EYE_Y, OFFICE3D_WALK_PORCH } from '../src/constants.js';
 import type { DeskModel } from '../src/office3d/model.js';
 
 vi.mock('three', async (importOriginal) => {
@@ -12,6 +12,8 @@ vi.mock('three', async (importOriginal) => {
     shadowMap = {};
     setPixelRatio(): void {}
     setSize(): void {}
+    dispose(): void {}
+    forceContextLoss(): void {}
   }
   class FakeCubeCamera {
     update(): void {}
@@ -29,8 +31,11 @@ vi.mock('three/addons/controls/OrbitControls.js', async () => {
     },
   };
 });
+const probe = vi.hoisted(() => ({
+  bake: (): Promise<unknown> => new Promise(() => undefined),
+}));
 vi.mock('three/addons/lights/LightProbeGenerator.js', () => ({
-  LightProbeGenerator: { fromCubeRenderTarget: () => new Promise(() => undefined) },
+  LightProbeGenerator: { fromCubeRenderTarget: () => probe.bake() },
 }));
 
 type Handler = (e: Record<string, unknown>) => void;
@@ -64,7 +69,11 @@ describe('OfficeScene pointer gestures', () => {
     vi.stubGlobal('window', {
       devicePixelRatio: 1,
       location: { hash: '', search: '' },
-      matchMedia: () => ({ matches: reducedMotion, addEventListener: () => undefined }),
+      matchMedia: () => ({
+        matches: reducedMotion,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+      }),
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     });
@@ -74,6 +83,7 @@ describe('OfficeScene pointer gestures', () => {
       addEventListener: () => undefined,
       removeEventListener: () => undefined,
     });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -154,6 +164,146 @@ describe('OfficeScene pointer gestures', () => {
     fire('pointerup', 2, 500);
 
     expect(picks).toEqual([]);
+  });
+
+  test('a finger landing while another still holds never picks, even after the first lifts', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    vi.spyOn(OfficeScene.prototype as unknown as { pick: () => number }, 'pick').mockReturnValue(7);
+    const picks: number[] = [];
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: (id) => picks.push(id),
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const canvas = (
+      scene as unknown as { renderer: { domElement: ReturnType<typeof fakeElement> } }
+    ).renderer.domElement;
+    const fire = (type: string, pointerId: number) =>
+      canvas.handlers.get(type)!({
+        pointerId,
+        clientX: 300,
+        clientY: 300,
+        button: 0,
+        buttons: 1,
+        pointerType: 'touch',
+      });
+
+    fire('pointerdown', 1);
+    fire('pointerdown', 2);
+    fire('pointerup', 1);
+    fire('pointerdown', 3);
+    fire('pointerup', 3);
+    fire('pointerup', 2);
+    expect(picks).toEqual([]);
+
+    fire('pointerdown', 4);
+    fire('pointerup', 4);
+    expect(picks).toEqual([7]);
+  });
+
+  test('a cancelled finger no longer blocks the next tap', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    vi.spyOn(OfficeScene.prototype as unknown as { pick: () => number }, 'pick').mockReturnValue(7);
+    const picks: number[] = [];
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: (id) => picks.push(id),
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const canvas = (
+      scene as unknown as { renderer: { domElement: ReturnType<typeof fakeElement> } }
+    ).renderer.domElement;
+    const fire = (type: string, pointerId: number) =>
+      canvas.handlers.get(type)!({
+        pointerId,
+        clientX: 300,
+        clientY: 300,
+        button: 0,
+        buttons: 1,
+        pointerType: 'touch',
+      });
+
+    fire('pointerdown', 1);
+    fire('pointercancel', 1);
+    fire('pointerdown', 2);
+    fire('pointerup', 2);
+
+    expect(picks).toEqual([7]);
+  });
+
+  test('a lost finger release does not block taps once a fresh touch starts', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    vi.spyOn(OfficeScene.prototype as unknown as { pick: () => number }, 'pick').mockReturnValue(7);
+    const picks: number[] = [];
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: (id) => picks.push(id),
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const canvas = (
+      scene as unknown as { renderer: { domElement: ReturnType<typeof fakeElement> } }
+    ).renderer.domElement;
+    const fire = (type: string, pointerId: number, isPrimary: boolean) =>
+      canvas.handlers.get(type)!({
+        pointerId,
+        isPrimary,
+        clientX: 300,
+        clientY: 300,
+        button: 0,
+        buttons: 1,
+        pointerType: 'touch',
+      });
+
+    fire('pointerdown', 1, true);
+    fire('pointerdown', 2, true);
+    fire('pointerup', 2, true);
+
+    expect(picks).toEqual([7]);
+  });
+
+  test('a layout that shrinks the office pulls the walker back onto the floor', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+      onPick: () => undefined,
+      onFocus: () => undefined,
+      onWalk: () => undefined,
+    });
+    const inner = scene as unknown as {
+      plan: { depth: number; width: number };
+      walkX: number;
+      walkZ: number;
+      layout: () => void;
+    };
+    scene.toggleWalk();
+    inner.walkZ = 1000;
+    inner.walkX = 1000;
+
+    inner.layout();
+
+    expect(inner.walkZ).toBeLessThanOrEqual(inner.plan.depth / 2 + OFFICE3D_WALK_PORCH);
+    expect(inner.walkX).toBeLessThanOrEqual(inner.plan.width / 2);
+  });
+
+  test('a light probe bake that fails after the scene is gone logs nothing', async () => {
+    const { OfficeScene } = await import('../src/office3d/scene.js');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    let fail: (e: unknown) => void = () => undefined;
+    probe.bake = () => new Promise((_, reject) => (fail = reject));
+    try {
+      const scene = new OfficeScene(fakeElement() as unknown as HTMLElement, {
+        onPick: () => undefined,
+        onFocus: () => undefined,
+        onWalk: () => undefined,
+      });
+      scene.dispose();
+      fail(new Error('context lost'));
+      await new Promise((r) => setTimeout(r, 0));
+
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      probe.bake = () => new Promise(() => undefined);
+      warn.mockRestore();
+    }
   });
 
   test('a wheel turn while leaving walk mode lets the glide back up finish', async () => {

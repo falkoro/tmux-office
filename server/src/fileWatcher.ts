@@ -1632,6 +1632,7 @@ export function reassignAgentToFile(
   cancelWaitingTimer(agentId, waitingTimers);
   cancelPermissionTimer(agentId, permissionTimers);
   clearAgentActivity(agent, agentId, agents, permissionTimers);
+  agent.midTurn = false;
 
   // Permanently dismiss old file so scanners never re-adopt it as external
   dismissalTracker!.permanentlyDismiss(agent.jsonlFile);

@@ -48,6 +48,7 @@ export interface ExistingAgentsOffice {
  * as restored agents do) unless they already exist; otherwise they are pushed
  * onto `pending` to be flushed by the next `layoutLoaded`. Returns true if any
  * agent was added directly, so the caller can persist seat assignments.
+ * Each snapshot is the whole list, so it replaces what is still buffered.
  */
 export function reconcileExistingAgents(
   os: ExistingAgentsOffice,
@@ -59,6 +60,7 @@ export function reconcileExistingAgents(
   headlessAgents: Record<number, boolean> = {},
 ): boolean {
   let addedDirectly = false;
+  pending.length = 0;
   for (const id of incoming) {
     const m = meta[id];
     const p: PendingAgent = {

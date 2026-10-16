@@ -784,6 +784,7 @@ export class OfficeScene {
   /** Skip OrbitControls until a walk exit glide finishes. Its polar clamp cannot look level. */
   private holdOrbit = false;
   private readonly keys = new Set<string>();
+  private readonly pointers = new Set<number>();
   private walkX = 0;
   private walkZ = 0;
   private yaw = 0;
@@ -831,7 +832,9 @@ export class OfficeScene {
         this.probe.sh.copy(baked.sh);
         this.requestRender();
       })
-      .catch((e: unknown) => console.warn('[Office3D] light probe bake failed', e))
+      .catch((e: unknown) => {
+        if (!this.disposed) console.warn('[Office3D] light probe bake failed', e);
+      })
       .finally(() => cube.dispose());
     this.scene.background = new Color(C.background);
     this.scene.fog = this.fog;
@@ -885,6 +888,7 @@ export class OfficeScene {
     this.listen(window, 'keyup', this.onKeyUp);
     this.listen(window, 'blur', this.clearKeys);
     this.listen(renderer.domElement, 'pointercancel', (e: PointerEvent) => {
+      this.pointers.delete(e.pointerId);
       if (this.down?.id === e.pointerId) this.down = null;
     });
     this.listen(document, 'visibilitychange', this.onVisibility);
@@ -1327,6 +1331,15 @@ export class OfficeScene {
       );
     }
 
+    if (this.walking && !this.tween) {
+      const at = stepWalk({ x: this.walkX, z: this.walkZ }, 0, NO_WALK_KEYS, 0, this.floorBounds());
+      if (at.x !== this.walkX || at.z !== this.walkZ) {
+        this.walkX = at.x;
+        this.walkZ = at.z;
+        this.placeWalkCamera();
+      }
+    }
+
     const key = fitKey(this.plan, this.link.focus);
     if (!this.userMoved && !this.walking && key !== null && key !== this.fitKey) {
       this.applyFocus(animate);
@@ -1527,6 +1540,12 @@ export class OfficeScene {
 
   // A click must not count as steering, or the first pick would freeze the fit.
   private readonly onPointerDown = (e: PointerEvent): void => {
+    if (e.isPrimary) {
+      this.pointers.clear();
+      this.down = null;
+    }
+    const others = [...this.pointers].some((id) => id !== e.pointerId);
+    this.pointers.add(e.pointerId);
     if (this.walking && this.down && this.renderer.domElement.hasPointerCapture(this.down.id)) {
       this.down.dragged = true;
       return;
@@ -1536,11 +1555,12 @@ export class OfficeScene {
       this.takeOver();
       return;
     }
-    this.down = { id: e.pointerId, x: e.clientX, y: e.clientY, button: e.button, dragged: false };
+    this.down = { id: e.pointerId, x: e.clientX, y: e.clientY, button: e.button, dragged: others };
     if (this.walking && e.button === 0) this.renderer.domElement.setPointerCapture(e.pointerId);
   };
 
   private readonly onPointerUp = (e: PointerEvent): void => {
+    this.pointers.delete(e.pointerId);
     if (this.renderer.domElement.hasPointerCapture(e.pointerId)) {
       this.renderer.domElement.releasePointerCapture(e.pointerId);
     }
