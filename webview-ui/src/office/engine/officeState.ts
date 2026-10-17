@@ -486,6 +486,8 @@ export class OfficeState {
       ch.tileRow = spawn.row;
     }
 
+    // The server replays a status only for an agent mid-turn or waiting, so one met between turns is idle.
+    ch.isActive = false;
     if (folderName) {
       ch.folderName = folderName;
     }

@@ -240,6 +240,15 @@ test('reconnect: a surviving agent drops the status it showed before the drop', 
   }
 });
 
+test('an agent met between turns reads idle until the server reports a turn', () => {
+  const os = new OfficeState();
+  os.addAgent(1);
+  assert.equal(os.characters.get(1)!.isActive, false);
+
+  os.setAgentActive(1, true);
+  assert.equal(os.characters.get(1)!.isActive, true);
+});
+
 test('reconnect: a surviving agent loses its sub-agents until the replay recreates the live ones', () => {
   const os = new OfficeState();
   os.addAgent(1);
