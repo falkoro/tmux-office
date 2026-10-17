@@ -314,10 +314,8 @@ export const EMPTY_SPRITE_THUMBNAIL_BG = '#333';
 export const MAX_PET_ID_LENGTH = 128;
 
 // ── Terminal panel ───────────────────────────────────────────
-/** Smallest font the pane terminal will try when fitting the panel. */
-export const TERMINAL_FONT_MIN_PX = 6;
-/** Largest font the pane terminal will try when fitting the panel. */
-export const TERMINAL_FONT_MAX_PX = 28;
+/** Font size of the pane terminal; the panel fits cols and rows around it. */
+export const TERMINAL_FONT_PX = 14;
 /** Keystrokes held while the pane socket is still connecting, in bytes. */
 export const TERMINAL_QUEUED_INPUT_MAX_BYTES = 4096;
 /** Fallback xterm colors when the page CSS variables have not resolved. */

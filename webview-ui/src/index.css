@@ -213,6 +213,11 @@
     background: var(--color-bg);
   }
 
+  /* The pixel font on every element would reach xterm's rows, which inherit its monospace font. */
+  .terminal-panel-body .xterm * {
+    font-family: inherit;
+  }
+
   /* xterm scrolls this node itself. clip would block that scroll. */
   .terminal-panel-body .xterm-viewport {
     overflow: hidden !important;

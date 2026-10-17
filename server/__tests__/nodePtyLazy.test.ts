@@ -66,7 +66,7 @@ describe.skipIf(!hasTmux)('attaching a pane', () => {
     const term = await attachTmuxPane(
       { session: 'demo', windowId, paneId },
       panePid,
-      () => undefined,
+      { cols: 80, rows: 24 },
       () => undefined,
     );
     term.stop();
@@ -83,7 +83,7 @@ describe.skipIf(!hasTmux)('attaching a pane', () => {
       attachTmuxPane(
         { session: 'demo', windowId, paneId },
         panePid,
-        () => undefined,
+        { cols: 80, rows: 24 },
         () => undefined,
       ),
     ).rejects.toThrow('tmux pane not found');

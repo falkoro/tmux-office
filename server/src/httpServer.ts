@@ -26,7 +26,12 @@ import {
 } from './constants.js';
 import { agentCreatedTerminalFields } from './liveSessionSync.js';
 import type { OfficeFeedState } from './officeFeed.js';
-import { type AttachedTerminal, attachTmuxPane } from './tmuxTerminal.js';
+import {
+  type AttachedTerminal,
+  attachTmuxPane,
+  DEFAULT_TERMINAL_SIZE,
+  terminalSize,
+} from './tmuxTerminal.js';
 import type { AgentState } from './types.js';
 
 /** Options for creating the HTTP + WebSocket server. */
@@ -431,6 +436,27 @@ function terminalAgentId(url: string): number | null {
   }
 }
 
+function requestedTerminalSize(url: string): { cols: number; rows: number } {
+  try {
+    const query = new URL(url, 'http://localhost').searchParams;
+    return terminalSize(query.get('cols'), query.get('rows')) ?? DEFAULT_TERMINAL_SIZE;
+  } catch {
+    return DEFAULT_TERMINAL_SIZE;
+  }
+}
+
+/** The size in a `{"type":"resize","cols":…,"rows":…}` text frame, or null for anything else. */
+function resizeRequest(frame: Buffer): { cols: number; rows: number } | null {
+  try {
+    const message = JSON.parse(frame.toString('utf8')) as unknown;
+    if (!message || typeof message !== 'object') return null;
+    const { type, cols, rows } = message as { type?: unknown; cols?: unknown; rows?: unknown };
+    return type === 'resize' ? terminalSize(cols, rows) : null;
+  } catch {
+    return null;
+  }
+}
+
 function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions): void {
   app.get('/ws/term', { websocket: true, onRequest: terminalGate(options) }, (socket, request) => {
     const agentId = terminalAgentId(request.url);
@@ -447,8 +473,17 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
     const pane = `${location.session}:${location.windowId}.${location.paneId}`;
     console.log(`[term] attach email=${email} pane=${pane}`);
 
+    const initialSize = requestedTerminalSize(request.url);
+    let size = initialSize;
     let stopped = false;
     let attached: AttachedTerminal | null = null;
+    const resize = (): void => {
+      try {
+        attached?.pty.resize(size.cols, size.rows);
+      } catch {
+        /* pty already closed */
+      }
+    };
     const detach = (): void => {
       if (stopped) return;
       stopped = true;
@@ -466,7 +501,15 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
       pendingBytes = 0;
     };
     socket.on('message', (data: unknown, isBinary: boolean) => {
-      if (!isBinary || stopped) return;
+      if (stopped) return;
+      if (!isBinary) {
+        const next = resizeRequest(toBuffer(data));
+        if (next) {
+          size = next;
+          resize();
+        }
+        return;
+      }
       const bytes = toBuffer(data);
       if (bytes.length === 0) return;
       if (
@@ -484,28 +527,22 @@ function registerTerminalRoute(app: FastifyInstance, options: HttpServerOptions)
       flush();
     });
 
-    void attachTmuxPane(
-      location,
-      pid,
-      (data) => {
-        if (socket.bufferedAmount > TERMINAL_OUTPUT_BUFFER_MAX_BYTES)
-          socket.close(WS_CLOSE_MESSAGE_TOO_BIG);
-        else if (socket.readyState === 1) socket.send(Buffer.from(data, 'utf8'));
-        if (!drawing) {
-          drawing = true;
-          flush();
-        }
-      },
-      (cols, rows) => {
-        safeSend(socket, { type: 'size', cols, rows });
-      },
-    )
+    void attachTmuxPane(location, pid, initialSize, (data) => {
+      if (socket.bufferedAmount > TERMINAL_OUTPUT_BUFFER_MAX_BYTES)
+        socket.close(WS_CLOSE_MESSAGE_TOO_BIG);
+      else if (socket.readyState === 1) socket.send(Buffer.from(data, 'utf8'));
+      if (!drawing) {
+        drawing = true;
+        flush();
+      }
+    })
       .then((term) => {
         if (stopped) {
           term.stop();
           return;
         }
         attached = term;
+        if (size !== initialSize) resize();
         term.pty.onExit(() => socket.close());
         flush();
       })
