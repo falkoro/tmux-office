@@ -71,11 +71,11 @@ test.describe('Hooks OFF / lifecycle', () => {
       tmpHome,
       claudeScenario('/clear reassignment hooks off')
         .defineSession('replacement', '{{sessionId}}-clear')
+        // The /clear record is the replacement file's FIRST record (in every
+        // hooks-off /clear scenario here): the external scanner defers a file
+        // only once it carries the /clear marker, so any earlier record opens a
+        // window in which a scanner tick adopts it as a second character.
         .at(3_500)
-        .appendJsonl(mockClaudeInitRecord('mock-claude-clear-ready'), {
-          session: 'replacement',
-        })
-        .at(3_550)
         .appendJsonl(buildClearCommandRecord(), {
           session: 'replacement',
         })
@@ -216,10 +216,6 @@ test.describe('Hooks OFF / lifecycle', () => {
       claudeScenario('/clear reassign with sibling present hooks off')
         .defineSession('replacement', '{{sessionId}}-clear')
         .at(3_500)
-        .appendJsonl(mockClaudeInitRecord('mock-claude-sibling-clear-ready'), {
-          session: 'replacement',
-        })
-        .at(3_550)
         .appendJsonl(buildClearCommandRecord(), {
           session: 'replacement',
         })
@@ -300,10 +296,6 @@ test.describe('Hooks OFF / lifecycle', () => {
       claudeScenario('/clear terminal move target hooks off')
         .defineSession('replacement', '{{sessionId}}-clear-moved')
         .at(3_500)
-        .appendJsonl(mockClaudeInitRecord('mock-claude-clear-moved-ready'), {
-          session: 'replacement',
-        })
-        .at(3_550)
         .appendJsonl(buildClearCommandRecord(), {
           session: 'replacement',
         })
@@ -555,10 +547,6 @@ test.describe('Hooks OFF / lifecycle', () => {
       claudeScenario('rapid clear then new tool under 500ms hooks off')
         .defineSession('replacement', '{{sessionId}}-clear-fast')
         .at(3_000)
-        .appendJsonl(mockClaudeInitRecord('mock-claude-clear-fast-ready'), {
-          session: 'replacement',
-        })
-        .at(3_050)
         .appendJsonl(buildClearCommandRecord(), {
           session: 'replacement',
         })
