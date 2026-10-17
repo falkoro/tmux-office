@@ -660,14 +660,23 @@ describe('live-only', () => {
       if (msg.type === 'agentStatus') statuses.push(msg.status);
     });
     const turnEnd = '{"type":"system","subtype":"turn_duration"}\n';
+    const usage = (tokens: number) =>
+      JSON.stringify({
+        type: 'assistant',
+        message: { usage: { cache_read_input_tokens: tokens }, content: [] },
+      }) + '\n';
     const nextSession = '77777777-7777-7777-7777-777777777777';
-    fs.writeFileSync(path.join(planted.projectDir, `${nextSession}.jsonl`), turnEnd);
+    fs.writeFileSync(
+      path.join(planted.projectDir, `${nextSession}.jsonl`),
+      usage(150_000) + turnEnd,
+    );
     live(nextSession);
     await vi.advanceTimersByTimeAsync(CLAUDE_SESSION_POLL_INTERVAL_MS);
     expect(planted.store.get(agent.id)?.sessionId).toBe(nextSession);
     expect(statuses).toContain('waiting');
+    expect(planted.store.get(agent.id)?.contextTokens).toBe(150_000);
 
-    fs.appendFileSync(planted.jsonl, turnEnd);
+    fs.appendFileSync(planted.jsonl, usage(40_000) + turnEnd);
     vi.setSystemTime(Date.now() + EXTERNAL_SCAN_INTERVAL_MS * 2 + 1000);
     statuses.length = 0;
     live(planted.sessionId);
@@ -676,7 +685,44 @@ describe('live-only', () => {
     expect(planted.store.get(agent.id)?.sessionId).toBe(planted.sessionId);
     expect(planted.store.get(agent.id)?.jsonlFile).toBe(planted.jsonl);
     expect(planted.store.get(agent.id)?.fileOffset).toBe(fs.statSync(planted.jsonl).size);
+    expect(planted.store.get(agent.id)?.contextTokens).toBe(40_000);
     expect(statuses).not.toContain('waiting');
+  });
+
+  it('reads a transcript born after the given cutoff from its start, however old it is', () => {
+    vi.useFakeTimers();
+    const planted = plant(true);
+    const agent = [...planted.store.values()][0]!;
+    const launchedAt = Date.now() - 1000;
+    const nextJsonl = path.join(planted.projectDir, 'abababab-abab-abab-abab-abababababab.jsonl');
+    fs.writeFileSync(
+      nextJsonl,
+      JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls' } }],
+        },
+      }) + '\n',
+    );
+    vi.setSystemTime(Date.now() + EXTERNAL_SCAN_INTERVAL_MS * 2 + 1000);
+    const started: unknown[] = [];
+    planted.store.on('broadcast', (msg) => {
+      if (msg.type === 'agentToolStart') started.push(msg.toolId);
+    });
+
+    reassignAgentToFile(
+      agent.id,
+      nextJsonl,
+      planted.store,
+      planted.runtime.fileWatchers,
+      planted.runtime.pollingTimers,
+      planted.runtime.waitingTimers,
+      planted.runtime.permissionTimers,
+      () => undefined,
+      launchedAt,
+    );
+
+    expect(started).toEqual(['toolu_1']);
   });
 
   it('keeps the agent through /clear and a resume back before the new transcript exists', async () => {

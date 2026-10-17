@@ -1618,6 +1618,7 @@ export function reassignAgentToFile(
   permissionTimers: Map<number, ReturnType<typeof setTimeout>>,
 
   persistAgents: () => void,
+  bornAfter = Date.now() - EXTERNAL_SCAN_INTERVAL_MS * 2,
 ): void {
   const agent = agents.get(agentId);
   if (!agent) return;
@@ -1648,8 +1649,10 @@ export function reassignAgentToFile(
   agent.fileOffset = 0;
   try {
     const stat = fs.statSync(newFilePath);
-    if (stat.birthtimeMs > 0 && Date.now() - stat.birthtimeMs > EXTERNAL_SCAN_INTERVAL_MS * 2) {
+    if (stat.birthtimeMs > 0 && stat.birthtimeMs < bornAfter) {
       agent.fileOffset = stat.size;
+      agent.contextTokens = 0;
+      agent.sawMainChainUsage = false;
     }
   } catch {
     /* start from beginning if stat fails */

@@ -216,6 +216,7 @@ export async function launchNewTerminal(
               waitingTimers,
               permissionTimers,
               persistAgents,
+              createdAt,
             );
           }
         } catch {
