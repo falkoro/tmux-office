@@ -7,8 +7,7 @@ import {
   TERMINAL_BG,
   TERMINAL_CURSOR,
   TERMINAL_FG,
-  TERMINAL_FONT_MAX_PX,
-  TERMINAL_FONT_MIN_PX,
+  TERMINAL_FONT_PX,
   TERMINAL_QUEUED_INPUT_MAX_BYTES,
 } from '../constants.js';
 
@@ -29,10 +28,12 @@ export interface TerminalPanelProps {
   onClose: () => void;
 }
 
-function terminalSocketUrl(agentId: number): string {
+function terminalSocketUrl(agentId: number, cols: number, rows: number): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const params = new URLSearchParams();
   params.set('agentId', String(agentId));
+  params.set('cols', String(cols));
+  params.set('rows', String(rows));
   const token = new URLSearchParams(window.location.search).get('token');
   if (token) params.set('token', token);
   return `${protocol}//${window.location.host}/ws/term?${params.toString()}`;
@@ -43,36 +44,28 @@ function cssColor(name: string, fallback: string): string {
   return value || fallback;
 }
 
-function fitTerminalFont(term: Terminal, host: HTMLElement, cols: number, rows: number): void {
-  if (cols < 1 || rows < 1) return;
+/** Resize the terminal to as many whole cells as fit in its host at the current font. */
+function fitTerminal(term: Terminal, host: HTMLElement): void {
   const screen = host.querySelector('.xterm-screen');
   if (!(screen instanceof HTMLElement)) return;
-  let low = TERMINAL_FONT_MIN_PX;
-  let high = TERMINAL_FONT_MAX_PX;
-  let best = low;
-  while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
-    term.options.fontSize = mid;
-    const fits = screen.offsetWidth <= host.clientWidth && screen.offsetHeight <= host.clientHeight;
-    if (fits) {
-      best = mid;
-      low = mid + 1;
-    } else {
-      high = mid - 1;
-    }
-  }
-  term.options.fontSize = best;
+  const cellWidth = screen.offsetWidth / term.cols;
+  const cellHeight = screen.offsetHeight / term.rows;
+  if (!(cellWidth > 0) || !(cellHeight > 0)) return;
+  const cols = Math.max(1, Math.floor(host.clientWidth / cellWidth));
+  const rows = Math.max(1, Math.floor(host.clientHeight / cellHeight));
+  if (cols !== term.cols || rows !== term.rows) term.resize(cols, rows);
 }
 
 /**
- * Browser terminal for one agent's tmux pane. The server chooses the cols and
- * rows; the font is scaled so that grid fills this panel.
+ * Browser terminal for one agent's tmux pane. The panel picks the cols and rows
+ * that fit at a fixed font, and the tmux window takes that size while this
+ * browser is the client used last.
  */
 export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: TerminalPanelProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const [disconnected, setDisconnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // A pane as wide as a desktop terminal is unreadable at 45%; let it take the page.
+  // Next to the office the panel gets 45% of the page; wide gives it all of it.
   const [wide, setWide] = useState(false);
 
   useEffect(() => {
@@ -82,7 +75,7 @@ export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: Term
     setError(null);
     const term = new Terminal({
       fontFamily: terminalFontFamily,
-      fontSize: TERMINAL_FONT_MIN_PX,
+      fontSize: TERMINAL_FONT_PX,
       scrollback: 0,
       cursorBlink: false,
       theme: {
@@ -92,33 +85,18 @@ export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: Term
       },
     });
     term.open(host);
+    fitTerminal(term, host);
 
-    let cols = 0;
-    let rows = 0;
-    let sized = false;
-    const pending: Uint8Array[] = [];
-    const fit = (): void => fitTerminalFont(term, host, cols, rows);
-
-    const socket = new WebSocket(terminalSocketUrl(agentId));
+    const socket = new WebSocket(terminalSocketUrl(agentId, term.cols, term.rows));
     socket.binaryType = 'arraybuffer';
     socket.onclose = () => setDisconnected(true);
     socket.onerror = () => setDisconnected(true);
     socket.onmessage = (event: MessageEvent) => {
       if (typeof event.data === 'string') {
-        let message: { type?: string; cols?: number; rows?: number; message?: string };
+        let message: { type?: string; message?: string };
         try {
           message = JSON.parse(event.data) as typeof message;
         } catch {
-          return;
-        }
-        if (message.type === 'size' && message.cols && message.rows) {
-          cols = message.cols;
-          rows = message.rows;
-          term.resize(cols, rows);
-          sized = true;
-          fit();
-          for (const chunk of pending) term.write(chunk);
-          pending.length = 0;
           return;
         }
         if (message.type === 'error') {
@@ -128,15 +106,19 @@ export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: Term
       }
       if (!(event.data instanceof ArrayBuffer)) return;
       // Raw bytes: xterm keeps UTF-8 decoder state across frames.
-      const bytes = new Uint8Array(event.data);
-      if (!sized) pending.push(bytes);
-      else term.write(bytes);
+      term.write(new Uint8Array(event.data));
     };
+    const sendSize = (): void => {
+      if (socket.readyState !== WebSocket.OPEN) return;
+      socket.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+    };
+    const resized = term.onResize(sendSize);
     const encoder = new TextEncoder();
     const queued: Uint8Array[] = [];
     let queuedBytes = 0;
     let overflowed = false;
     socket.onopen = () => {
+      sendSize();
       for (const bytes of queued) socket.send(bytes);
       queued.length = 0;
     };
@@ -154,10 +136,11 @@ export function TerminalPanel({ agentId, name, tmux, reconnects, onClose }: Term
       }
     });
 
-    const observer = new ResizeObserver(() => fit());
+    const observer = new ResizeObserver(() => fitTerminal(term, host));
     observer.observe(host);
     return () => {
       observer.disconnect();
+      resized.dispose();
       input.dispose();
       socket.onopen = null;
       socket.onclose = null;

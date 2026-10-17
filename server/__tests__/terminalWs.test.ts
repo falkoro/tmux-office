@@ -63,7 +63,7 @@ describe('terminal argv', () => {
     try {
       const argv = buildAttachArgv({ session: 'demo', windowId: '@1', paneId: '%1' }, 'pa-web-abc');
       expect(argv.slice(0, 2)).toEqual(['-L', 'pa-test-unit']);
-      expect(argv).toContain('ignore-size');
+      expect(argv).not.toContain('ignore-size');
       expect(argv).toContain('destroy-unattached');
       expect(argv).not.toContain('window-size');
       expect(argv).toContain('@1');
@@ -192,8 +192,6 @@ describe.skipIf(!hasTmux)('/ws/term attach', () => {
   let handle: HttpServerHandle | undefined;
   let paneId = '';
   let targetWindowId = '';
-  let width = 0;
-  let height = 0;
   const previousSocket = process.env.PIXEL_AGENTS_TMUX_SOCKET;
 
   beforeAll(async () => {
@@ -205,18 +203,16 @@ describe.skipIf(!hasTmux)('/ws/term attach', () => {
         '-p',
         '-t',
         'demo',
-        '#{session_name} #{window_id} #{pane_id} #{window_width} #{window_height} #{pane_pid}',
+        '#{session_name} #{window_id} #{pane_id} #{pane_pid}',
       ])
     )
       .trim()
       .split(/\s+/);
-    const [session, windowId, pane, widthRaw, heightRaw, panePid] = fields;
+    const [session, windowId, pane, panePid] = fields;
     if (!session || !windowId || !pane)
       throw new Error(`unexpected tmux identity: ${fields.join(' ')}`);
     paneId = pane;
     targetWindowId = windowId;
-    width = Number(widthRaw);
-    height = Number(heightRaw);
     // A second pane in the window takes focus, so the attach must select the followed one.
     await tmux(socketName, ['split-window', '-t', pane]);
     // `demo`, which a stale registry entry would still name, goes away; only the
@@ -248,10 +244,34 @@ describe.skipIf(!hasTmux)('/ws/term attach', () => {
     await execFileAsync('tmux', ['-L', socketName, 'kill-server']).catch(() => undefined);
   });
 
-  it('types into the followed pane and removes the throwaway session', async () => {
+  it('gives the window the browser size while in use, then back to the other client', async () => {
     if (!handle) throw new Error('server did not start');
+    const { spawn } = await import('node-pty');
+    const env = { ...process.env };
+    delete env.TMUX;
+    delete env.TMUX_PANE;
+    const desk = spawn('tmux', ['-L', socketName, 'attach-session', '-t', 'other'], {
+      name: 'xterm-256color',
+      cols: 100,
+      rows: 30,
+      cwd: process.env.HOME || '/tmp',
+      env,
+    });
+    const windowSize = async (): Promise<string> =>
+      (
+        await tmux(socketName, [
+          'display-message',
+          '-p',
+          '-t',
+          paneId,
+          '#{window_width} #{window_height}',
+        ])
+      ).trim();
+    // One row of each client goes to the tmux status line.
+    await waitFor(async () => (await windowSize()) === '100 29');
+
     const socket = new WebSocket(
-      `ws://127.0.0.1:${handle.port}/ws/term?agentId=1&token=test-token&tmux=nope`,
+      `ws://127.0.0.1:${handle.port}/ws/term?agentId=1&token=test-token&tmux=nope&cols=90&rows=25`,
     );
     const frames: { binary: boolean; text: string }[] = [];
     await new Promise<void>((resolve, reject) => {
@@ -267,25 +287,16 @@ describe.skipIf(!hasTmux)('/ws/term attach', () => {
       frames.push({ binary: isBinary, text: buffer.toString('utf8') });
     });
 
-    await waitFor(async () =>
-      frames.some((frame) => !frame.binary && frame.text.includes('"type":"size"')),
-    );
+    await waitFor(async () => frames.some((frame) => frame.binary));
     socket.send(Buffer.from('echo hi-from-test\r'));
     await waitFor(async () => {
       const captured = await tmux(socketName, ['capture-pane', '-p', '-t', paneId]);
       return captured.includes('hi-from-test');
     });
+    expect(await windowSize()).toBe('90 24');
 
-    const sizeAfter = (
-      await tmux(socketName, [
-        'display-message',
-        '-p',
-        '-t',
-        paneId,
-        '#{window_width} #{window_height}',
-      ])
-    ).trim();
-    expect(sizeAfter).toBe(`${width} ${height}`);
+    socket.send(JSON.stringify({ type: 'resize', cols: 70, rows: 20 }));
+    await waitFor(async () => (await windowSize()) === '70 19');
     expect(await tmux(socketName, ['show-options', '-w', '-t', targetWindowId])).toBe('');
 
     socket.close();
@@ -296,7 +307,8 @@ describe.skipIf(!hasTmux)('/ws/term attach', () => {
         .map((name) => name.trim())
         .some((name) => name.startsWith('pa-web-'));
     });
-    expect(frames.some((frame) => frame.binary)).toBe(true);
+    await waitFor(async () => (await windowSize()) === '100 29');
+    desk.kill();
   }, 20_000);
 
   it('closes the socket when the tmux client exits', async () => {

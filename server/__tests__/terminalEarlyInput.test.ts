@@ -9,7 +9,12 @@ let paneOutput: ((data: string) => void) | null = null;
 
 vi.mock('../src/tmuxTerminal.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../src/tmuxTerminal.js')>()),
-  attachTmuxPane: (_location: unknown, _pid: number, onData: (data: string) => void) =>
+  attachTmuxPane: (
+    _location: unknown,
+    _pid: number,
+    _size: unknown,
+    onData: (data: string) => void,
+  ) =>
     new Promise<AttachedTerminal>((resolve) => {
       paneOutput = onData;
       finishAttach = resolve;

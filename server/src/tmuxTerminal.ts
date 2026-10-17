@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { promisify } from 'node:util';
 
-import { TERM_SIZE_POLL_INTERVAL_MS, TMUX_LIST_PANES_TIMEOUT_MS } from './constants.js';
+import { TMUX_LIST_PANES_TIMEOUT_MS } from './constants.js';
 import {
   type ProcReader,
   realProc,
@@ -16,8 +16,6 @@ const WINDOW_ID = /^@\d+$/;
 const PANE_ID = /^%\d+$/;
 const SOCKET_NAME = /^[A-Za-z0-9_-]+$/;
 const MAX_DIMENSION = 500;
-const FALLBACK_COLS = 80;
-const FALLBACK_ROWS = 24;
 const THROWAWAY_PREFIX = 'pa-web-';
 const THROWAWAY_ID_BYTES = 8;
 const THROWAWAY_SESSION = new RegExp(`^${THROWAWAY_PREFIX}[0-9a-f]{${THROWAWAY_ID_BYTES * 2}}$`);
@@ -74,9 +72,12 @@ export function isSafeTmuxLocation(location: TmuxLocation): boolean {
 /**
  * Argv for a throwaway grouped session that shares the target's windows.
  *
- * Only session options go on the throwaway session. `window-size` is a
+ * The client counts toward the window size, so with tmux's default
+ * `window-size latest` the window takes the browser panel's size while the
+ * browser is the client used last, the way attaching from a smaller terminal
+ * does. Only session options go on the throwaway session: `window-size` is a
  * window option in tmux 3.7, so setting it here would stick on the user's
- * shared window. The pty is sized to the window instead (readPaneClientSize).
+ * shared window.
  */
 export function buildAttachArgv(location: TmuxLocation, sessionName: string): string[] {
   return [
@@ -86,8 +87,6 @@ export function buildAttachArgv(location: TmuxLocation, sessionName: string): st
     `=${location.session}`,
     '-s',
     sessionName,
-    '-f',
-    'ignore-size',
     ';',
     'set-option',
     '-t',
@@ -105,71 +104,14 @@ export function buildAttachArgv(location: TmuxLocation, sessionName: string): st
   ];
 }
 
-function statusLineCount(value: string): number | null {
-  const trimmed = value.trim();
-  if (trimmed === 'on') return 1;
-  if (trimmed === 'off') return 0;
-  if (trimmed === '') return null;
-  const count = Number(trimmed);
-  if (Number.isInteger(count) && count >= 0 && count <= 5) return count;
-  return null;
-}
+export const DEFAULT_TERMINAL_SIZE = { cols: 80, rows: 24 } as const;
 
-async function readStatusLines(paneId: string): Promise<number> {
-  const prefix = tmuxSocketArgs();
-  const queries = [
-    [...prefix, 'show-options', '-v', '-t', paneId, 'status'],
-    [...prefix, 'show-options', '-gv', 'status'],
-  ];
-  for (const args of queries) {
-    try {
-      const { stdout } = await runTmux(args, 2000);
-      const count = statusLineCount(stdout);
-      if (count !== null) return count;
-    } catch {
-      /* try the next query */
-    }
-  }
-  return 1;
-}
-
-function clampDimension(value: number): number {
-  if (!Number.isInteger(value) || value < 1) return 1;
-  return Math.min(value, MAX_DIMENSION);
-}
-
-/**
- * Pty size that matches the target window. With `window-size latest` and no
- * other client attached, the window follows this client, so rows include the
- * status line to keep the window height unchanged.
- */
-export async function readPaneClientSize(
-  paneId: string,
-): Promise<{ cols: number; rows: number } | null> {
-  if (!PANE_ID.test(paneId)) return null;
-  try {
-    const { stdout } = await runTmux(
-      [
-        ...tmuxSocketArgs(),
-        'display-message',
-        '-p',
-        '-t',
-        paneId,
-        '#{window_width} #{window_height}',
-      ],
-      2000,
-    );
-    const [widthRaw, heightRaw] = stdout.trim().split(/\s+/);
-    const width = Number(widthRaw);
-    const height = Number(heightRaw);
-    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
-      return null;
-    }
-    const status = await readStatusLines(paneId);
-    return { cols: clampDimension(width), rows: clampDimension(height + status) };
-  } catch {
-    return null;
-  }
+/** The cols and rows a browser asked for, capped at 500 each; null unless both are whole numbers of at least 1. */
+export function terminalSize(cols: unknown, rows: unknown): { cols: number; rows: number } | null {
+  const c = Number(cols);
+  const r = Number(rows);
+  if (!Number.isInteger(c) || !Number.isInteger(r) || c < 1 || r < 1) return null;
+  return { cols: Math.min(c, MAX_DIMENSION), rows: Math.min(r, MAX_DIMENSION) };
 }
 
 /** One pane from `tmux list-panes -a`. Session may still be unsafe. */
@@ -301,8 +243,8 @@ export interface AttachedTerminal {
 export async function attachTmuxPane(
   stored: TmuxLocation,
   pid: number,
+  size: { cols: number; rows: number },
   onData: (data: string) => void,
-  onSize: (cols: number, rows: number) => void,
 ): Promise<AttachedTerminal> {
   if (!isSafeTmuxLocation(stored)) {
     throw new Error('unsafe tmux location');
@@ -312,10 +254,6 @@ export async function attachTmuxPane(
     throw new Error('tmux pane not found');
   }
   const sessionName = throwawaySessionName();
-  const size = (await readPaneClientSize(location.paneId)) ?? {
-    cols: FALLBACK_COLS,
-    rows: FALLBACK_ROWS,
-  };
   // Loaded here, not at the top: the VS Code extension bundles this module and
   // must load on hosts where node-pty's native build is missing.
   const { spawn } = (await import(NODE_PTY)) as NodePty;
@@ -327,22 +265,6 @@ export async function attachTmuxPane(
     env: tmuxEnv(),
   });
   term.onData(onData);
-  onSize(size.cols, size.rows);
-
-  let current = size;
-  const timer = setInterval(() => {
-    void readPaneClientSize(location.paneId).then((next) => {
-      if (!next) return;
-      if (next.cols === current.cols && next.rows === current.rows) return;
-      current = next;
-      try {
-        term.resize(next.cols, next.rows);
-      } catch {
-        /* pty already closed */
-      }
-      onSize(next.cols, next.rows);
-    });
-  }, TERM_SIZE_POLL_INTERVAL_MS);
 
   let stopped = false;
   return {
@@ -351,7 +273,6 @@ export async function attachTmuxPane(
     stop() {
       if (stopped) return;
       stopped = true;
-      clearInterval(timer);
       try {
         term.kill();
       } catch {
