@@ -28,7 +28,7 @@ export const CONSENT_FACT_WHAT =
 /** WHAT data moves, and where it stops.
  *
  *  "Nothing leaves your machine" is not something this prompt can promise:
- *  `npx pixel-agents --host 0.0.0.0` binds the same server to every interface,
+ *  `node dist/cli.js --host 0.0.0.0` binds the same server to every interface,
  *  and an accepted socket receives the store broadcasts
  *  (server/src/httpServer.ts). So it states the default and names the one
  *  thing that changes it, rather than making a promise the software can be

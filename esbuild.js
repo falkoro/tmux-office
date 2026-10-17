@@ -92,7 +92,7 @@ async function main() {
     sourcesContent: false,
     platform: 'node',
     outfile: 'dist/extension.js',
-    external: ['vscode'],
+    external: ['vscode', 'node-pty'],
     define: versionDefine,
     logLevel: 'silent',
     plugins: [
@@ -138,7 +138,7 @@ async function buildCli() {
     sourcemap: !production,
     platform: 'node',
     outfile: 'dist/cli.js',
-    external: ['fastify', '@fastify/websocket', '@fastify/static', '@fastify/cors'],
+    external: ['fastify', '@fastify/websocket', '@fastify/static', '@fastify/cors', 'node-pty'],
     define: versionDefine,
     logLevel: 'silent',
   });

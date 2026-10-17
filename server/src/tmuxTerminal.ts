@@ -1,0 +1,363 @@
+import { execFile } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
+import { promisify } from 'node:util';
+
+import { TERM_SIZE_POLL_INTERVAL_MS, TMUX_LIST_PANES_TIMEOUT_MS } from './constants.js';
+import {
+  type ProcReader,
+  realProc,
+  runsInPane,
+  type TmuxLocation,
+} from './providers/hook/claude/claudeSessionRegistry.js';
+
+const execFileAsync = promisify(execFile);
+
+const WINDOW_ID = /^@\d+$/;
+const PANE_ID = /^%\d+$/;
+const SOCKET_NAME = /^[A-Za-z0-9_-]+$/;
+const MAX_DIMENSION = 500;
+const FALLBACK_COLS = 80;
+const FALLBACK_ROWS = 24;
+const THROWAWAY_PREFIX = 'pa-web-';
+const THROWAWAY_ID_BYTES = 8;
+const THROWAWAY_SESSION = new RegExp(`^${THROWAWAY_PREFIX}[0-9a-f]{${THROWAWAY_ID_BYTES * 2}}$`);
+
+/** A fresh name for the grouped session one /ws/term attach creates. */
+export function throwawaySessionName(): string {
+  return `${THROWAWAY_PREFIX}${randomBytes(THROWAWAY_ID_BYTES).toString('hex')}`;
+}
+
+let warnedSocketName = false;
+
+export function tmuxSocketName(): string | undefined {
+  const name = process.env.PIXEL_AGENTS_TMUX_SOCKET;
+  if (!name) return undefined;
+  if (SOCKET_NAME.test(name)) return name;
+  if (!warnedSocketName) {
+    warnedSocketName = true;
+    console.warn(
+      `[Pixel Agents] Ignoring PIXEL_AGENTS_TMUX_SOCKET=${JSON.stringify(name)}: it must be a tmux -L name of letters, digits, '_' or '-'. Reading the default tmux server.`,
+    );
+  }
+  return undefined;
+}
+
+/**
+ * The env for every tmux call. Without a socket name the default server is
+ * meant, not the one this process may run inside, which TMUX would select.
+ */
+export function tmuxEnv(): NodeJS.ProcessEnv {
+  if (tmuxSocketName()) return process.env;
+  const env = { ...process.env };
+  delete env.TMUX;
+  delete env.TMUX_PANE;
+  return env;
+}
+
+function runTmux(args: string[], timeout: number): Promise<{ stdout: string }> {
+  return execFileAsync('tmux', args, { timeout, env: tmuxEnv() });
+}
+
+/** `-L <name>` when PIXEL_AGENTS_TMUX_SOCKET is set, otherwise nothing. */
+export function tmuxSocketArgs(): string[] {
+  const name = tmuxSocketName();
+  return name ? ['-L', name] : [];
+}
+
+export function isSafeTmuxLocation(location: TmuxLocation): boolean {
+  if (!location.session || location.session.startsWith('-')) return false;
+  if (/[\s;\0]/.test(location.session)) return false;
+  if (THROWAWAY_SESSION.test(location.session)) return false;
+  return WINDOW_ID.test(location.windowId) && PANE_ID.test(location.paneId);
+}
+
+/**
+ * Argv for a throwaway grouped session that shares the target's windows.
+ *
+ * Only session options go on the throwaway session. `window-size` is a
+ * window option in tmux 3.7, so setting it here would stick on the user's
+ * shared window. The pty is sized to the window instead (readPaneClientSize).
+ */
+export function buildAttachArgv(location: TmuxLocation, sessionName: string): string[] {
+  return [
+    ...tmuxSocketArgs(),
+    'new-session',
+    '-t',
+    `=${location.session}`,
+    '-s',
+    sessionName,
+    '-f',
+    'ignore-size',
+    ';',
+    'set-option',
+    '-t',
+    sessionName,
+    'destroy-unattached',
+    'on',
+    ';',
+    'select-window',
+    '-t',
+    location.windowId,
+    ';',
+    'select-pane',
+    '-t',
+    location.paneId,
+  ];
+}
+
+function statusLineCount(value: string): number | null {
+  const trimmed = value.trim();
+  if (trimmed === 'on') return 1;
+  if (trimmed === 'off') return 0;
+  if (trimmed === '') return null;
+  const count = Number(trimmed);
+  if (Number.isInteger(count) && count >= 0 && count <= 5) return count;
+  return null;
+}
+
+async function readStatusLines(paneId: string): Promise<number> {
+  const prefix = tmuxSocketArgs();
+  const queries = [
+    [...prefix, 'show-options', '-v', '-t', paneId, 'status'],
+    [...prefix, 'show-options', '-gv', 'status'],
+  ];
+  for (const args of queries) {
+    try {
+      const { stdout } = await runTmux(args, 2000);
+      const count = statusLineCount(stdout);
+      if (count !== null) return count;
+    } catch {
+      /* try the next query */
+    }
+  }
+  return 1;
+}
+
+function clampDimension(value: number): number {
+  if (!Number.isInteger(value) || value < 1) return 1;
+  return Math.min(value, MAX_DIMENSION);
+}
+
+/**
+ * Pty size that matches the target window. With `window-size latest` and no
+ * other client attached, the window follows this client, so rows include the
+ * status line to keep the window height unchanged.
+ */
+export async function readPaneClientSize(
+  paneId: string,
+): Promise<{ cols: number; rows: number } | null> {
+  if (!PANE_ID.test(paneId)) return null;
+  try {
+    const { stdout } = await runTmux(
+      [
+        ...tmuxSocketArgs(),
+        'display-message',
+        '-p',
+        '-t',
+        paneId,
+        '#{window_width} #{window_height}',
+      ],
+      2000,
+    );
+    const [widthRaw, heightRaw] = stdout.trim().split(/\s+/);
+    const width = Number(widthRaw);
+    const height = Number(heightRaw);
+    if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+      return null;
+    }
+    const status = await readStatusLines(paneId);
+    return { cols: clampDimension(width), rows: clampDimension(height + status) };
+  } catch {
+    return null;
+  }
+}
+
+/** One pane from `tmux list-panes -a`. Session may still be unsafe. */
+export interface TmuxPaneRecord {
+  paneId: string;
+  /** The process tmux started in the pane. */
+  panePid: number;
+  session: string;
+  windowId: string;
+  /** The window's name when someone set it; absent while tmux renames the window on its own. */
+  windowName?: string;
+}
+
+/** Argv for the read-only pane listing. Socket flags match the rest of the server. */
+export function listTmuxPanesArgv(): string[] {
+  return [
+    ...tmuxSocketArgs(),
+    'list-panes',
+    '-a',
+    '-F',
+    '#{pane_id} #{pane_pid} #{session_name} #{window_id}\t#{automatic-rename}#{window_name}',
+  ];
+}
+
+/**
+ * Parse `list-panes` output. The session name is whatever sits between the
+ * pane id and the window id, so a name with spaces survives for the safety check.
+ * After the tab comes the automatic-rename flag and the window name, kept only
+ * when the flag is 0.
+ */
+export function parseTmuxPaneList(stdout: string): TmuxPaneRecord[] {
+  const panes: TmuxPaneRecord[] = [];
+  for (const line of stdout.split('\n')) {
+    if (!line) {
+      continue;
+    }
+    const tab = line.indexOf('\t');
+    const tail = tab < 0 ? '' : line.slice(tab + 1);
+    const parts = (tab < 0 ? line : line.slice(0, tab)).split(' ');
+    if (parts.length < 4) {
+      continue;
+    }
+    const paneId = parts[0] ?? '';
+    const panePid = Number(parts[1]);
+    const windowId = parts[parts.length - 1] ?? '';
+    const session = parts.slice(2, -1).join(' ');
+    if (
+      !paneId ||
+      !Number.isInteger(panePid) ||
+      !session ||
+      !windowId ||
+      THROWAWAY_SESSION.test(session)
+    ) {
+      continue;
+    }
+    const windowName = tail.startsWith('0') ? tail.slice(1) : '';
+    panes.push({ paneId, panePid, session, windowId, ...(windowName ? { windowName } : {}) });
+  }
+  return panes;
+}
+
+/**
+ * Every pane on the tmux server, or null when tmux could not be asked.
+ * Read-only. An empty array is a successful listing with no panes.
+ */
+export async function listTmuxPanes(): Promise<TmuxPaneRecord[] | null> {
+  try {
+    const { stdout } = await runTmux(listTmuxPanesArgv(), TMUX_LIST_PANES_TIMEOUT_MS);
+    return parseTmuxPaneList(stdout);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Where a pane is now, within its stored session, once /proc shows the Claude
+ * process `pid` runs in it. Pane ids are unique only per tmux server; where
+ * /proc cannot tell (macOS) the session name decides. The live registry
+ * follows moves. Throwaway sessions are never picked.
+ */
+export async function resolvePaneLocation(
+  location: TmuxLocation,
+  pid: number,
+  proc: ProcReader = realProc,
+): Promise<TmuxLocation | null> {
+  const pane = (await listTmuxPanes())?.find(
+    (p) =>
+      p.paneId === location.paneId &&
+      p.session === location.session &&
+      runsInPane(pid, p.panePid, proc) !== false,
+  );
+  return pane ? { session: pane.session, windowId: pane.windowId, paneId: pane.paneId } : null;
+}
+
+export async function killThrowawaySession(sessionName: string): Promise<void> {
+  if (!THROWAWAY_SESSION.test(sessionName)) return;
+  try {
+    await runTmux([...tmuxSocketArgs(), 'kill-session', '-t', sessionName], 2000);
+  } catch {
+    /* destroy-unattached already removed it */
+  }
+}
+
+/** The members of node-pty's IPty this module uses. */
+interface Pty {
+  onData(listener: (data: string) => void): unknown;
+  onExit(listener: () => void): unknown;
+  write(data: string | Buffer): void;
+  resize(cols: number, rows: number): void;
+  kill(): void;
+}
+
+interface NodePty {
+  spawn(
+    file: string,
+    args: string[],
+    options: { name: string; cols: number; rows: number; cwd: string; env: NodeJS.ProcessEnv },
+  ): Pty;
+}
+
+const NODE_PTY = 'node-pty';
+
+export interface AttachedTerminal {
+  pty: Pty;
+  sessionName: string;
+  stop(): void;
+}
+
+export async function attachTmuxPane(
+  stored: TmuxLocation,
+  pid: number,
+  onData: (data: string) => void,
+  onSize: (cols: number, rows: number) => void,
+): Promise<AttachedTerminal> {
+  if (!isSafeTmuxLocation(stored)) {
+    throw new Error('unsafe tmux location');
+  }
+  const location = await resolvePaneLocation(stored, pid);
+  if (!location || !isSafeTmuxLocation(location)) {
+    throw new Error('tmux pane not found');
+  }
+  const sessionName = throwawaySessionName();
+  const size = (await readPaneClientSize(location.paneId)) ?? {
+    cols: FALLBACK_COLS,
+    rows: FALLBACK_ROWS,
+  };
+  // Loaded here, not at the top: the VS Code extension bundles this module and
+  // must load on hosts where node-pty's native build is missing.
+  const { spawn } = (await import(NODE_PTY)) as NodePty;
+  const term = spawn('tmux', buildAttachArgv(location, sessionName), {
+    name: 'xterm-256color',
+    cols: size.cols,
+    rows: size.rows,
+    cwd: process.env.HOME || '/tmp',
+    env: tmuxEnv(),
+  });
+  term.onData(onData);
+  onSize(size.cols, size.rows);
+
+  let current = size;
+  const timer = setInterval(() => {
+    void readPaneClientSize(location.paneId).then((next) => {
+      if (!next) return;
+      if (next.cols === current.cols && next.rows === current.rows) return;
+      current = next;
+      try {
+        term.resize(next.cols, next.rows);
+      } catch {
+        /* pty already closed */
+      }
+      onSize(next.cols, next.rows);
+    });
+  }, TERM_SIZE_POLL_INTERVAL_MS);
+
+  let stopped = false;
+  return {
+    pty: term,
+    sessionName,
+    stop() {
+      if (stopped) return;
+      stopped = true;
+      clearInterval(timer);
+      try {
+        term.kill();
+      } catch {
+        /* already dead */
+      }
+      void killThrowawaySession(sessionName);
+    },
+  };
+}

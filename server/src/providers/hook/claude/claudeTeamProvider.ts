@@ -3,6 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 import type { TeamProvider } from '../../../../../core/src/teamProvider.js';
+import { listClaudeConfigDirs } from './claudeConfigDirs.js';
 
 /**
  * Claude Code implementation of the TeamProvider interface.
@@ -247,26 +248,29 @@ export const claudeTeamProvider: TeamProvider = {
   },
 
   getTeamMembers(teamName) {
-    const configPath = path.join(os.homedir(), '.claude', 'teams', teamName, 'config.json');
-    let raw: string;
-    try {
-      raw = fs.readFileSync(configPath, 'utf-8');
-    } catch {
-      return null; // config missing / unreadable -> team dissolved
-    }
-    try {
-      const data = JSON.parse(raw) as { members?: Array<{ name?: unknown; isActive?: unknown }> };
-      if (!Array.isArray(data.members)) return null;
-      const names = new Set<string>();
-      for (const m of data.members) {
-        // isActive:false = the CLI marked this one-shot teammate finished (newer
-        // harnesses keep finished members listed). Missing isActive = active
-        // (older configs never write the field).
-        if (m && typeof m.name === 'string' && m.isActive !== false) names.add(m.name);
+    // Union across config dirs: each account may hold its own copy of the team.
+    let names: Set<string> | null = null; // none parse -> team dissolved
+    for (const configDir of listClaudeConfigDirs(os.homedir())) {
+      try {
+        const raw = fs.readFileSync(
+          path.join(configDir, 'teams', teamName, 'config.json'),
+          'utf-8',
+        );
+        const data = JSON.parse(raw) as {
+          members?: Array<{ name?: unknown; isActive?: unknown }>;
+        };
+        if (!Array.isArray(data.members)) continue;
+        names ??= new Set<string>();
+        for (const m of data.members) {
+          // isActive:false = the CLI marked this one-shot teammate finished (newer
+          // harnesses keep finished members listed). Missing isActive = active
+          // (older configs never write the field).
+          if (m && typeof m.name === 'string' && m.isActive !== false) names.add(m.name);
+        }
+      } catch {
+        /* missing or unreadable in this config dir */
       }
-      return names;
-    } catch {
-      return null;
     }
+    return names;
   },
 };

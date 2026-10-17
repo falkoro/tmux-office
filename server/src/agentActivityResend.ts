@@ -8,8 +8,9 @@ import { hasPromotedBackgroundAgent } from './teamUtils.js';
  * 1. Team info first — webview needs team context before tool messages
  * 2. Regular tools
  * 3. Background tools with runInBackground + isTeammateSpawn flags, skipping promoted spawns
- * 4. Waiting status
- * 5. Context usage
+ * 4. Permission wait, after the tools it marks
+ * 5. Waiting status, or active for an agent mid-turn
+ * 6. Context usage
  */
 export function resendAgentActivity(
   send: (message: Record<string, unknown>) => void,
@@ -66,16 +67,24 @@ export function resendAgentActivity(
       });
     }
 
-    // 4. Waiting status
+    // 4. Permission wait
+    if (agent.permissionSent) {
+      send({ type: 'agentToolPermission', id });
+    }
+
+    // 5. Waiting status
     if (agent.isWaiting) {
       send({
         type: 'agentStatus',
         id,
         status: 'waiting',
+        awaitingInput: agent.awaitingInput === true,
       });
+    } else if (agent.midTurn) {
+      send({ type: 'agentStatus', id, status: 'active' });
     }
 
-    // 5. Context usage
+    // 6. Context usage
     if (agent.contextTokens > 0) {
       send({
         type: 'agentContextUsage',

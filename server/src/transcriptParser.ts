@@ -10,6 +10,7 @@ import {
   cancelWaitingTimer,
   clearAgentActivity,
   startPermissionTimer,
+  startTurn,
   startWaitingTimer,
 } from './timerManager.js';
 import type { AgentState } from './types.js';
@@ -24,6 +25,20 @@ let hookProvider: HookProvider | null = null;
 /** Permission-exempt tools come from the active provider. Fail-open if unset. */
 function exemptTools(): ReadonlySet<string> {
   return hookProvider?.permissionExemptTools ?? EMPTY_EXEMPT_TOOLS;
+}
+
+const COMMAND_OUTPUT =
+  /^\s*(<(bash-stdout|bash-stderr|local-command-stdout|local-command-stderr)>|\[Request interrupted by user)/;
+const COMMAND_INPUT = /^\s*<bash-input>/;
+
+/**
+ * A user record the CLI writes with no model turn after it: a command's
+ * input (/clear, bash mode) starts no turn, and its output or an interrupt ends one.
+ */
+function localCommandRecord(content: string): 'input' | 'output' | null {
+  if (COMMAND_OUTPUT.test(content)) return 'output';
+  if (COMMAND_INPUT.test(content) || content.includes('/clear</command-name>')) return 'input';
+  return null;
 }
 
 /** Whether the given tool name spawns a sub-agent according to the active provider. */
@@ -151,6 +166,8 @@ export function processTranscriptLine(
       if (hasToolUse) {
         cancelWaitingTimer(agentId, waitingTimers);
         agent.isWaiting = false;
+        agent.awaitingInput = false;
+        agent.midTurn = true;
         agent.hadToolsInTurn = true;
         agents.broadcast({ type: 'agentStatus', id: agentId, status: 'active' });
         let hasNonExemptTool = false;
@@ -261,6 +278,27 @@ export function processTranscriptLine(
       processProgressRecord(agentId, record, agents, waitingTimers, permissionTimers);
     } else if (record.type === 'user') {
       const content = record.message?.content ?? record.content;
+      // New user text prompt — new turn starting
+      const userText = (text: string): void => {
+        const local = localCommandRecord(text);
+        if (!local || !agent.isWaiting) {
+          cancelWaitingTimer(agentId, waitingTimers);
+          clearAgentActivity(agent, agentId, agents, permissionTimers);
+        }
+        if (local === 'output' && !agent.isWaiting) {
+          agent.isWaiting = true;
+          agent.awaitingInput = false;
+          agent.midTurn = false;
+          agents.broadcast({
+            type: 'agentStatus',
+            id: agentId,
+            status: 'waiting',
+            awaitingInput: false,
+          });
+        } else if (local) agent.midTurn = false;
+        else startTurn(agent, agentId, agents);
+        agent.hadToolsInTurn = false;
+      };
       if (Array.isArray(content)) {
         const blocks = content as Array<{ type: string; tool_use_id?: string; content?: unknown }>;
         const hasToolResult = blocks.some((b) => b.type === 'tool_result');
@@ -395,17 +433,12 @@ export function processTranscriptLine(
           if (agent.activeToolIds.size === 0) {
             agent.hadToolsInTurn = false;
           }
-        } else {
-          // New user text prompt — new turn starting
-          cancelWaitingTimer(agentId, waitingTimers);
-          clearAgentActivity(agent, agentId, agents, permissionTimers);
-          agent.hadToolsInTurn = false;
+        } else if (!record.isMeta) {
+          const first = blocks.find((b) => b.type === 'text') as { text?: unknown } | undefined;
+          userText(typeof first?.text === 'string' ? first.text : '');
         }
-      } else if (typeof content === 'string' && content.trim()) {
-        // New user text prompt — new turn starting
-        cancelWaitingTimer(agentId, waitingTimers);
-        clearAgentActivity(agent, agentId, agents, permissionTimers);
-        agent.hadToolsInTurn = false;
+      } else if (typeof content === 'string' && content.trim() && !record.isMeta) {
+        userText(content);
       }
     } else if (record.type === 'queue-operation' && record.operation === 'enqueue') {
       // Background agent completed — parse tool-use-id from XML content
@@ -503,10 +536,12 @@ export function processTranscriptLine(
       }
 
       agent.isWaiting = true;
+      agent.midTurn = false;
       agent.permissionSent = false;
       agent.hadToolsInTurn = false;
       // Skip status post when hooks already handled it
       if (!agent.hookDelivered) {
+        agent.awaitingInput = false;
         agents.broadcast({
           type: 'agentStatus',
           id: agentId,

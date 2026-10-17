@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 
-import { CliArgsError, parseArgs } from '../src/cli.js';
+import { accessConfigFromEnv, CliArgsError, parseArgs } from '../src/cli.js';
 import { CLAUDE_HOOK_EVENTS } from '../src/providers/hook/claude/constants.js';
 
 const CLI_BUNDLE = path.join(__dirname, '../../dist/cli.js');
@@ -119,6 +119,23 @@ describe('parseArgs', () => {
   it('parses --host', () => {
     expect(parseArgs(['--host', '0.0.0.0']).host).toBe('0.0.0.0');
   });
+
+  it('defaults the watch-all, live-only, and insecure-terminal flags off', () => {
+    const args = parseArgs([]);
+    expect(args.watchAll).toBe(false);
+    expect(args.liveOnly).toBe(false);
+    expect(args.insecureLocalTerminal).toBe(false);
+  });
+
+  it('parses --watch-all and --insecure-local-terminal', () => {
+    const args = parseArgs(['--watch-all', '--insecure-local-terminal']);
+    expect(args.watchAll).toBe(true);
+    expect(args.insecureLocalTerminal).toBe(true);
+  });
+
+  it('parses --live-only', () => {
+    expect(parseArgs(['--live-only']).liveOnly).toBe(true);
+  });
 });
 
 // The TTY consent prompt is gone: first-run consent is asked in the app, as
@@ -128,6 +145,34 @@ describe('parseArgs', () => {
 // consentFlow.test.ts (an unrecognized hooksConsentResponse choice
 // writes nothing), and the disclosure-content pins live in consentCopy.test.ts
 // plus the handshake test asserting the request carries that copy verbatim.
+
+describe('accessConfigFromEnv', () => {
+  const TEAM = 'example.cloudflareaccess.com';
+
+  it('is off when neither Access variable is set', () => {
+    expect(accessConfigFromEnv({})).toBeUndefined();
+  });
+
+  it('reads both Access variables', () => {
+    expect(
+      accessConfigFromEnv({
+        PIXEL_AGENTS_ACCESS_TEAM_DOMAIN: TEAM,
+        PIXEL_AGENTS_ACCESS_AUD: 'aud',
+      }),
+    ).toEqual({ teamDomain: TEAM, aud: 'aud' });
+  });
+
+  it('refuses to start without the gate when only one Access variable is set', () => {
+    expect(() => accessConfigFromEnv({ PIXEL_AGENTS_ACCESS_TEAM_DOMAIN: TEAM })).toThrow(
+      new CliArgsError(
+        'PIXEL_AGENTS_ACCESS_AUD is not set. Set both Access variables, or neither.',
+      ),
+    );
+    expect(() => accessConfigFromEnv({ PIXEL_AGENTS_ACCESS_AUD: 'aud' })).toThrow(
+      /PIXEL_AGENTS_ACCESS_TEAM_DOMAIN is not set/,
+    );
+  });
+});
 
 /**
  * These spawn the real bundled dist/cli.js (built by esbuild), not the TS
@@ -149,7 +194,7 @@ describe('dist/cli.js entry-point guard', () => {
   itBuilt('runs main() when executed directly: --help prints usage and exits 0', async () => {
     const { code, stdout } = await runCli(['--help']);
     expect(code).toBe(0);
-    expect(stdout).toContain('Usage: pixel-agents');
+    expect(stdout).toContain('Usage: node dist/cli.js');
   });
 
   // 12. Direct execution still runs main()'s port validation (rejects before listen())

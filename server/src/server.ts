@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 
+import type { AccessVerifier } from './accessJwt.js';
 import type { AgentRuntime } from './agentRuntime.js';
 import type { AgentStateStore } from './agentStateStore.js';
 import type {
@@ -18,6 +19,7 @@ import {
   SERVERS_DIR,
 } from './constants.js';
 import { createHttpServer } from './httpServer.js';
+import type { OfficeFeedState } from './officeFeed.js';
 import type { ServerConfig } from './serverConfig.js';
 import { isServerConfig, isServerTarget } from './serverConfig.js';
 
@@ -32,7 +34,7 @@ type HookEventCallback = (providerId: string, event: Record<string, unknown>) =>
  *
  * Routes (via Fastify in httpServer.ts):
  * - `POST /api/hooks/:providerId` -- hook event (auth required, 64KB body limit)
- * - `GET /api/health` -- health check (no auth)
+ * - `GET /api/health` -- health check (no auth unless Cloudflare Access is set)
  * - `GET /ws` -- WebSocket for real-time agent state (auth required)
  *
  * Discovery: writes `~/.pixel-agents/server.json` (legacy single-target pointer)
@@ -41,7 +43,7 @@ type HookEventCallback = (providerId: string, event: Record<string, unknown>) =>
  * Multi-window / multi-surface: a second instance detects running servers via
  * the registry and reuses one only when it offers the same capability
  * (embedded reuses embedded, standalone reuses standalone) -- an embedded
- * VS Code server and a standalone `npx pixel-agents` server can run at once,
+ * VS Code server and a standalone `node dist/cli.js` server can run at once,
  * each owning its own registry entry, both reachable by hook fan-out.
  */
 export class PixelAgentsServer {
@@ -69,6 +71,10 @@ export class PixelAgentsServer {
     assetCache?: AssetCache;
     onSetHooksEnabled?: SetHooksEnabledSideEffect;
     onReloadAssets?: ReloadAssetsSideEffect;
+    insecureLocalTerminal?: boolean;
+    access?: AccessVerifier;
+    officeFeed?: OfficeFeedState;
+    officeEmbedOrigins?: readonly string[];
   }): Promise<ServerConfig> {
     const embedded = options?.embedded ?? true;
     const wantsSpa = !embedded;
@@ -81,6 +87,11 @@ export class PixelAgentsServer {
     // stale file never blocks discovery of a live one.
     const registry = this.readAndPruneRegistry();
     const candidate = registry.find((e) => e.servesSpa === wantsSpa);
+    if (candidate && (options?.access || options?.insecureLocalTerminal)) {
+      throw new Error(
+        `[Pixel Agents] A ${wantsSpa ? 'standalone' : 'embedded'} server is already running on port ${candidate.port} (PID ${candidate.pid}); it cannot take this server's ${[options.access && 'Access', options.insecureLocalTerminal && 'terminal'].filter(Boolean).join(' and ')} settings. Stop it and start again.`,
+      );
+    }
     if (candidate) {
       this.config = candidate;
       this.ownsServer = false;
@@ -106,6 +117,10 @@ export class PixelAgentsServer {
       onHookEvent: (providerId, event) => this.callback?.(providerId, event),
       onSetHooksEnabled: options?.onSetHooksEnabled,
       onReloadAssets: options?.onReloadAssets,
+      insecureLocalTerminal: options?.insecureLocalTerminal,
+      access: options?.access,
+      officeFeed: options?.officeFeed,
+      officeEmbedOrigins: options?.officeEmbedOrigins,
     });
 
     this.app = app;

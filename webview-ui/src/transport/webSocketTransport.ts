@@ -7,6 +7,13 @@ import {
 import type { ClientMessage, ServerMessage } from '../../../core/src/messages.js';
 import type { MessageTransport, TransportState } from './types.js';
 
+/** Agent ids restart with the server, so these must not reach whichever server answers a reconnect. */
+const AGENT_ID_MESSAGES: ReadonlySet<ClientMessage['type']> = new Set([
+  'closeAgent',
+  'focusAgent',
+  'saveAgentSeats',
+]);
+
 /**
  * WebSocket transport for standalone browser mode.
  * Connects to the Pixel Agents server via WebSocket for bidirectional messaging.
@@ -57,15 +64,17 @@ export class WebSocketTransport implements MessageTransport {
     this.ws = new WebSocket(this.url);
 
     this.ws.onopen = () => {
+      const afterDrop = this.reconnectAttempts > 0;
       this.reconnectAttempts = 0;
       console.log('[Transport] WebSocket connected');
-      this.setState(TRANSPORT_STATE_CONNECTED);
-      this.resolveReady();
       // Flush any messages queued while connecting
       for (const msg of this.pendingMessages) {
+        if (afterDrop && AGENT_ID_MESSAGES.has(msg.type)) continue;
         this.ws!.send(JSON.stringify(msg));
       }
       this.pendingMessages = [];
+      this.setState(TRANSPORT_STATE_CONNECTED);
+      this.resolveReady();
     };
 
     this.ws.onmessage = (e: MessageEvent) => {

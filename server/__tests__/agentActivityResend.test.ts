@@ -1,7 +1,16 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 
 import { resendAgentActivity } from '../src/agentActivityResend.js';
 import { AgentStateStore } from '../src/agentStateStore.js';
+import { DismissalTracker } from '../src/dismissalTracker.js';
+import { reassignAgentToFile, setDismissalTracker } from '../src/fileWatcher.js';
+import { HookEventHandler } from '../src/hookEventHandler.js';
+import { claudeProvider } from '../src/providers/hook/claude/claude.js';
+import { SessionRouter } from '../src/sessionRouter.js';
+import { processTranscriptLine } from '../src/transcriptParser.js';
 import type { AgentState } from '../src/types.js';
 
 function createTestAgent(overrides: Partial<AgentState> = {}): AgentState {
@@ -32,7 +41,201 @@ function createTestAgent(overrides: Partial<AgentState> = {}): AgentState {
   } as AgentState;
 }
 
+/** The last agentStatus a client saw live, and the one a reconnecting client is replayed. */
+function liveAndReplayedStatus(drive: (store: AgentStateStore) => void) {
+  const store = new AgentStateStore();
+  store.set(1, createTestAgent({ id: 1 }));
+  const live: Array<Record<string, unknown>> = [];
+  store.on('broadcast', (msg) => live.push(msg));
+  drive(store);
+  const replayed: Array<Record<string, unknown>> = [];
+  resendAgentActivity((msg) => replayed.push(msg), store);
+  const lastStatus = (msgs: Array<Record<string, unknown>>) =>
+    msgs.filter((m) => m.type === 'agentStatus').at(-1);
+  return { live: lastStatus(live), replayed: lastStatus(replayed) };
+}
+
 describe('resendAgentActivity', () => {
+  it('replays an agent waiting for input as waiting for input, not done', () => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
+      const handler = new HookEventHandler(
+        store,
+        new Map(),
+        new Map(),
+        claudeProvider,
+        new SessionRouter(),
+      );
+      handler.registerAgent('sess-1', 1);
+      handler.handleEvent('claude', {
+        hook_event_name: 'Notification',
+        session_id: 'sess-1',
+        notification_type: 'idle_prompt',
+      });
+    });
+    expect(live).toMatchObject({ status: 'waiting', awaitingInput: true });
+    expect(replayed).toEqual(live);
+  });
+
+  it('replays an agent mid-turn with no open tool as active', () => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
+      const line = JSON.stringify({ type: 'user', message: { content: 'next task' } });
+      processTranscriptLine(1, line, store, new Map(), new Map());
+    });
+    expect(live).toEqual({ type: 'agentStatus', id: 1, status: 'active' });
+    expect(replayed).toEqual(live);
+  });
+
+  it('replays no active status after /clear follows a finished turn', () => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
+      for (const record of [
+        { type: 'user', message: { content: 'task' } },
+        { type: 'system', subtype: 'turn_duration' },
+        {
+          type: 'user',
+          isMeta: true,
+          message: { content: '<local-command-caveat>Caveat</local-command-caveat>' },
+        },
+        {
+          type: 'user',
+          message: {
+            content: '<command-name>/clear</command-name>\n<command-args></command-args>',
+          },
+        },
+      ]) {
+        processTranscriptLine(1, JSON.stringify(record), store, new Map(), new Map());
+      }
+    });
+    expect(live).toMatchObject({ status: 'waiting' });
+    expect(replayed).toEqual(live);
+  });
+
+  it('ends the turn when a local command prints its output', () => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
+      for (const record of [
+        { type: 'user', message: { content: 'task' } },
+        { type: 'system', subtype: 'turn_duration' },
+        {
+          type: 'user',
+          message: {
+            content: '<command-name>/model</command-name>\n<command-args></command-args>',
+          },
+        },
+        {
+          type: 'user',
+          message: { content: '<local-command-stdout>Set model to Opus</local-command-stdout>' },
+        },
+      ]) {
+        processTranscriptLine(1, JSON.stringify(record), store, new Map(), new Map());
+      }
+    });
+    expect(live).toMatchObject({ status: 'waiting' });
+    expect(replayed).toEqual(live);
+  });
+
+  it('ends the turn when a bash-mode command prints its output', () => {
+    const { live, replayed } = liveAndReplayedStatus((store) => {
+      for (const record of [
+        { type: 'user', message: { content: 'task' } },
+        { type: 'system', subtype: 'turn_duration' },
+        { type: 'user', message: { content: '<bash-input>git status</bash-input>' } },
+        {
+          type: 'user',
+          message: {
+            content: '<bash-stdout>nothing to commit</bash-stdout><bash-stderr></bash-stderr>',
+          },
+        },
+      ]) {
+        processTranscriptLine(1, JSON.stringify(record), store, new Map(), new Map());
+      }
+    });
+    expect(live).toMatchObject({ status: 'waiting' });
+    expect(replayed).toEqual(live);
+  });
+
+  it('ends the turn when the user interrupts a response', () => {
+    for (const content of [
+      [{ type: 'text', text: '[Request interrupted by user]' }],
+      '[Request interrupted by user for tool use]',
+    ]) {
+      const { live, replayed } = liveAndReplayedStatus((store) => {
+        for (const record of [
+          { type: 'user', message: { content: 'task' } },
+          { type: 'user', message: { content } },
+        ]) {
+          processTranscriptLine(1, JSON.stringify(record), store, new Map(), new Map());
+        }
+      });
+      expect(live).toMatchObject({ status: 'waiting' });
+      expect(replayed).toEqual(live);
+    }
+  });
+
+  it('sends no new status when an idle agent runs a bash-mode command', () => {
+    const store = new AgentStateStore();
+    store.set(1, createTestAgent({ id: 1, isWaiting: true }));
+    const statuses: Array<Record<string, unknown>> = [];
+    store.on('broadcast', (msg) => {
+      if (msg.type === 'agentStatus') statuses.push(msg);
+    });
+    for (const content of ['<bash-input>ls</bash-input>', '<bash-stdout>a.txt</bash-stdout>']) {
+      const line = JSON.stringify({ type: 'user', message: { content } });
+      processTranscriptLine(1, line, store, new Map(), new Map());
+    }
+    expect(statuses).toEqual([]);
+  });
+
+  it('keeps an idle agent with a running background spawn idle through a bash-mode command', () => {
+    const store = new AgentStateStore();
+    store.set(
+      1,
+      createTestAgent({
+        id: 1,
+        isWaiting: true,
+        activeToolStatuses: new Map([['bg', 'Subtask: Survey']]),
+        activeToolNames: new Map([['bg', 'Agent']]),
+        backgroundAgentToolIds: new Set(['bg']),
+      }),
+    );
+    const sent: Array<Record<string, unknown>> = [];
+    store.on('broadcast', (msg) => sent.push(msg));
+    for (const content of ['<bash-input>ls</bash-input>', '<bash-stdout>a.txt</bash-stdout>']) {
+      const line = JSON.stringify({ type: 'user', message: { content } });
+      processTranscriptLine(1, line, store, new Map(), new Map());
+    }
+    expect(sent.filter((m) => m.type === 'agentToolStart' || m.type === 'agentStatus')).toEqual([]);
+  });
+
+  it('replays no active status for an agent moved to its /clear transcript', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-resend-'));
+    const pollingTimers = new Map<number, ReturnType<typeof setInterval>>();
+    try {
+      const next = path.join(dir, 'next.jsonl');
+      fs.writeFileSync(next, '');
+      setDismissalTracker(new DismissalTracker());
+      const { live, replayed } = liveAndReplayedStatus((store) => {
+        const prompt = JSON.stringify({ type: 'user', message: { content: 'task' } });
+        processTranscriptLine(1, prompt, store, new Map(), new Map());
+        const done = JSON.stringify({ type: 'system', subtype: 'turn_duration' });
+        processTranscriptLine(1, done, store, new Map(), new Map());
+        reassignAgentToFile(
+          1,
+          next,
+          store,
+          new Map(),
+          pollingTimers,
+          new Map(),
+          new Map(),
+          () => {},
+        );
+      });
+      expect(live).toMatchObject({ status: 'waiting' });
+      expect(replayed).toEqual(live);
+    } finally {
+      for (const timer of pollingTimers.values()) clearInterval(timer);
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('sends messages in order: team info, tools, waiting, context', () => {
     const store = new AgentStateStore();
     store.set(
@@ -182,13 +385,33 @@ describe('resendAgentActivity', () => {
     store.set(1, createTestAgent({ id: 1, isWaiting: true }));
     let sent: Array<Record<string, unknown>> = [];
     resendAgentActivity((msg) => sent.push(msg), store);
-    expect(sent).toEqual([{ type: 'agentStatus', id: 1, status: 'waiting' }]);
+    expect(sent).toEqual([{ type: 'agentStatus', id: 1, status: 'waiting', awaitingInput: false }]);
 
     store = new AgentStateStore();
     store.set(2, createTestAgent({ id: 2, isWaiting: false }));
     sent = [];
     resendAgentActivity((msg) => sent.push(msg), store);
     expect(sent).toHaveLength(0);
+  });
+
+  it('replays a pending permission wait after the tool it marks', () => {
+    const store = new AgentStateStore();
+    store.set(
+      1,
+      createTestAgent({
+        id: 1,
+        permissionSent: true,
+        activeToolStatuses: new Map([['tool-1', 'Running: git push']]),
+        activeToolNames: new Map([['tool-1', 'Bash']]),
+      }),
+    );
+    store.set(2, createTestAgent({ id: 2 }));
+    const sent: Array<Record<string, unknown>> = [];
+    resendAgentActivity((msg) => sent.push(msg), store);
+    expect(sent.map((m) => `${m.type}#${m.id}`)).toEqual([
+      'agentToolStart#1',
+      'agentToolPermission#1',
+    ]);
   });
 
   it('sends context usage only when agent has tokens', () => {

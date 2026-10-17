@@ -47,6 +47,23 @@ export const GLOBAL_SCAN_ACTIVE_MIN_SIZE = 3_072; // 3KB
 /** Only adopt global JSONL files modified within this window */
 export const GLOBAL_SCAN_ACTIVE_MAX_AGE_MS = 600_000; // 10 minutes
 
+/** How often the live Claude session registry re-reads session files under each ~/.claude* config dir. */
+export const CLAUDE_SESSION_POLL_INTERVAL_MS = 2_000;
+/** The per-tick tmux pane listing gives up after this long, before the next tick starts. */
+export const TMUX_LIST_PANES_TIMEOUT_MS = 1_500;
+/** How often an attached terminal re-reads the target window's size. */
+export const TERM_SIZE_POLL_INTERVAL_MS = 2_000;
+/** Cloudflare Access signing keys are cached for this long, then refetched. */
+export const ACCESS_JWKS_CACHE_MS = 10 * 60 * 1000;
+/** At most one unknown-kid refetch of the Access signing keys per this window. */
+export const ACCESS_JWKS_MIN_REFETCH_MS = 30_000;
+/** A fetch of the Access signing keys gives up after this long. */
+export const ACCESS_JWKS_FETCH_TIMEOUT_MS = 5_000;
+/** After a failed fetch of the Access signing keys, wait this long before trying again. */
+export const ACCESS_JWKS_RETRY_MS = 10_000;
+/** Clock skew tolerated on Access JWT `exp` / `nbf` (seconds). */
+export const ACCESS_JWT_CLOCK_SKEW_SEC = 60;
+
 // ── Display Truncation + Pixel Agents Server paths ──────────
 // Centralized in core/src/constants.ts; re-exported here for back-compat.
 export {
@@ -81,6 +98,12 @@ export const WS_CLOSE_UNAUTHORIZED = 4001;
  *  WebSocket connects bypass CORS, so this is the only thing standing between
  *  a drive-by web page and the privileged client-message channel. */
 export const WS_CLOSE_FORBIDDEN_ORIGIN = 4003;
+/** /ws/term: input queued before tmux draws, or output the client is not reading, passed its cap. */
+export const WS_CLOSE_MESSAGE_TOO_BIG = 1009;
+export const TERMINAL_PENDING_INPUT_MAX_BYTES = 64 * 1024;
+export const TERMINAL_OUTPUT_BUFFER_MAX_BYTES = 8 * 1024 * 1024;
+/** Largest single WebSocket frame /ws and /ws/term accept. */
+export const WS_MAX_PAYLOAD_BYTES = 4 * 1024 * 1024;
 
 export const HOOK_EVENT_BUFFER_MS = 5_000;
 /** Grace period after SessionEnd(reason=clear/resume) before triggering onSessionEnd.

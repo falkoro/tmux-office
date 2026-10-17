@@ -9,14 +9,12 @@ on:
     paths-ignore:
       - '**.md'
       - 'LICENSE'
-      - '.github/FUNDING.yml'
   push:
     branches:
       - main
     paths-ignore:
       - '**.md'
       - 'LICENSE'
-      - '.github/FUNDING.yml'
 
 permissions:
   contents: read
@@ -137,6 +135,10 @@ jobs:
         continue-on-error: true
 
       # --- Server Tests (require build for hook script) ---
+
+      - name: Install tmux
+        if: always() && steps.install_dependencies.outcome == 'success'
+        run: sudo apt-get update && sudo apt-get install -y tmux
 
       - name: Server Tests
         id: server_test

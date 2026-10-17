@@ -1,0 +1,109 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { normalizeProjectPath } from '../../core/src/normalizeProjectPath.js';
+import {
+  allSessionRoots,
+  listClaudeConfigDirs,
+  sessionDirsForWorkspace,
+} from '../src/providers/hook/claude/claudeConfigDirs.js';
+
+describe('claude config dirs', () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  function home(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-claude-home-'));
+    dirs.push(dir);
+    return dir;
+  }
+
+  it('lists config directories, skips files and bak dirs, and keeps .claude first', () => {
+    const root = home();
+    fs.mkdirSync(path.join(root, '.claude-work'));
+    fs.mkdirSync(path.join(root, '.claude'));
+    fs.mkdirSync(path.join(root, '.claude-client'));
+    fs.writeFileSync(path.join(root, '.claude.json'), '{}');
+    fs.mkdirSync(path.join(root, '.claude.bak-old'));
+    fs.mkdirSync(path.join(root, '.claude-client.bak-1'));
+    fs.mkdirSync(path.join(root, 'notes'));
+
+    expect(listClaudeConfigDirs(root).map((dir) => path.basename(dir))).toEqual([
+      '.claude',
+      '.claude-client',
+      '.claude-work',
+    ]);
+  });
+
+  it.each([
+    '.claude.bak',
+    '.claude.old',
+    '.claude.orig',
+    '.claude.bak-2026-01-01',
+    '.claude.old-1',
+    '.claude-work.orig-2',
+    '.claude-backup',
+    '.claude.backup',
+  ])('skips the backup dir %s', (name) => {
+    const root = home();
+    fs.mkdirSync(path.join(root, '.claude'));
+    fs.mkdirSync(path.join(root, '.claude-older'));
+    fs.mkdirSync(path.join(root, name));
+    expect(listClaudeConfigDirs(root).map((dir) => path.basename(dir))).toEqual([
+      '.claude',
+      '.claude-older',
+    ]);
+  });
+
+  it('follows a symlink to a config directory', () => {
+    const root = home();
+    const real = path.join(root, 'real-claude');
+    fs.mkdirSync(real);
+    fs.symlinkSync(real, path.join(root, '.claude-link'), 'dir');
+    expect(listClaudeConfigDirs(root).map((dir) => path.basename(dir))).toEqual(['.claude-link']);
+  });
+
+  it('lists a symlinked alias of a config directory only once, keeping .claude', () => {
+    const root = home();
+    fs.mkdirSync(path.join(root, '.claude'));
+    fs.symlinkSync(path.join(root, '.claude'), path.join(root, '.claude-alt'), 'dir');
+    expect(listClaudeConfigDirs(root).map((dir) => path.basename(dir))).toEqual(['.claude']);
+  });
+
+  it('returns an empty list when the home directory is missing', () => {
+    expect(listClaudeConfigDirs(path.join(os.tmpdir(), 'pxl-missing-home-nope'))).toEqual([]);
+  });
+
+  it('includes the canonical projects root even when .claude does not exist', () => {
+    const root = home();
+    fs.mkdirSync(path.join(root, '.claude-work'));
+    expect(allSessionRoots(root)).toEqual([
+      path.join(root, '.claude', 'projects'),
+      path.join(root, '.claude-work', 'projects'),
+    ]);
+  });
+
+  it('finds a workspace transcript dir in every config dir and falls back to .claude', () => {
+    const root = home();
+    const workspace = '/tmp/Example Project';
+    const hashed = normalizeProjectPath(workspace);
+    const work = path.join(root, '.claude-work', 'projects', hashed);
+    fs.mkdirSync(work, { recursive: true });
+    fs.mkdirSync(path.join(root, '.claude'));
+
+    expect(sessionDirsForWorkspace(root, workspace)).toEqual([
+      path.join(root, '.claude', 'projects', hashed),
+      work,
+    ]);
+
+    const empty = home();
+    expect(sessionDirsForWorkspace(empty, workspace)).toEqual([
+      path.join(empty, '.claude', 'projects', hashed),
+    ]);
+  });
+});

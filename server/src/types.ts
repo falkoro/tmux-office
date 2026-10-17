@@ -1,8 +1,12 @@
 import type * as vscode from 'vscode';
 
+import type { TmuxLocation } from './providers/hook/claude/claudeSessionRegistry.js';
+
 export interface AgentState {
   id: number;
   sessionId: string;
+  /** The session id this agent was moved from by its latest /clear, until the registry shows its new one. */
+  clearedFromSessionId?: string;
   /** Terminal reference — undefined for extension panel sessions */
   terminalRef?: vscode.Terminal;
   /** Whether this agent was detected from an external source (VS Code extension panel, etc.) */
@@ -18,6 +22,10 @@ export interface AgentState {
   activeSubagentToolNames: Map<string, Map<string, string>>; // parentToolId → (subToolId → toolName)
   backgroundAgentToolIds: Set<string>; // tool IDs for run_in_background Agent calls (stay alive until queue-operation)
   isWaiting: boolean;
+  /** The last waiting status said the agent is waiting for input, not done. */
+  awaitingInput?: boolean;
+  /** Marked active since the last waiting status; replayed to a reconnecting client. */
+  midTurn?: boolean;
   permissionSent: boolean;
   hadToolsInTurn: boolean;
   /** Workspace folder name (only set for multi-root workspaces) */
@@ -85,6 +93,13 @@ export interface AgentState {
   palette?: number;
   /** Hue shift in degrees (0-360). Rotates the base palette colors. */
   hueShift?: number;
+
+  /** Live tmux pane from the Claude session registry. Not persisted. */
+  tmux?: TmuxLocation | null;
+  /** Pid of the live Claude process that `tmux` belongs to. Not persisted. */
+  livePid?: number;
+  /** `name` from the session registry. Not the teammate `agentName`. Not persisted. */
+  registryName?: string | null;
 }
 
 export interface PersistedAgent {

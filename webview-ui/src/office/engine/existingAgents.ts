@@ -48,6 +48,7 @@ export interface ExistingAgentsOffice {
  * as restored agents do) unless they already exist; otherwise they are pushed
  * onto `pending` to be flushed by the next `layoutLoaded`. Returns true if any
  * agent was added directly, so the caller can persist seat assignments.
+ * Each snapshot is the whole list, so it replaces what is still buffered.
  */
 export function reconcileExistingAgents(
   os: ExistingAgentsOffice,
@@ -59,6 +60,7 @@ export function reconcileExistingAgents(
   headlessAgents: Record<number, boolean> = {},
 ): boolean {
   let addedDirectly = false;
+  pending.length = 0;
   for (const id of incoming) {
     const m = meta[id];
     const p: PendingAgent = {
@@ -80,4 +82,64 @@ export function reconcileExistingAgents(
     }
   }
   return addedDirectly;
+}
+
+/**
+ * Drop the tmux placement of every character a reconnect snapshot leaves out
+ * of its terminal map. The snapshot's own entries are stamped afterwards.
+ */
+export function clearMissingTerminals(
+  characters: Iterable<[number, { tmux?: unknown; sessionName?: string | null }]>,
+  terminals: Record<string, unknown>,
+): void {
+  for (const [id, ch] of characters) {
+    if (terminals[id] !== undefined) continue;
+    ch.tmux = null;
+    ch.sessionName = null;
+  }
+}
+
+/**
+ * Top-level agents (id > 0) on screen that a snapshot no longer lists: they
+ * ended while the client was away and their agentClosed never arrived.
+ */
+export function agentsMissingFrom(characterIds: Iterable<number>, incoming: number[]): number[] {
+  const live = new Set(incoming);
+  return [...characterIds].filter((id) => id > 0 && !live.has(id));
+}
+
+/** Structural view of OfficeState for clearing a surviving agent's status. */
+export interface StatusResetOffice {
+  characters: Map<number, { bubbleType: unknown; bubbleTimer: number }>;
+  setAgentActive: (id: number, active: boolean) => void;
+  setAgentTool: (id: number, tool: string | null) => void;
+  removeAllSubagents: (parentAgentId: number) => void;
+}
+
+/**
+ * Agents a snapshot lists that are already on screen: drop the status and the
+ * sub-agents they showed before the drop, since the snapshot's replay only
+ * re-sends what is still true and recreates the live sub-agents.
+ */
+export function resetSurvivingStatus(os: StatusResetOffice, incoming: number[]): void {
+  for (const id of incoming) {
+    const ch = os.characters.get(id);
+    if (!ch) continue;
+    os.setAgentActive(id, false);
+    os.setAgentTool(id, null);
+    os.removeAllSubagents(id);
+    ch.bubbleType = null;
+    ch.bubbleTimer = 0;
+  }
+}
+
+/**
+ * Whether a snapshot comes from another server process than the first one
+ * this page saw. Agent ids restart with the server, so the page's characters
+ * and terminals would attach to the wrong sessions.
+ */
+export function isNewServer(seen: { serverId?: string }, serverId: unknown): boolean {
+  if (typeof serverId !== 'string') return false;
+  seen.serverId ??= serverId;
+  return seen.serverId !== serverId;
 }

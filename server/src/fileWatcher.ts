@@ -44,6 +44,7 @@ import {
 } from './constants.js';
 import { seedContextUsage } from './contextUsage.js';
 import type { DismissalTracker } from './dismissalTracker.js';
+import { mayCreateDiscoveredTopLevel } from './liveOnly.js';
 import { assignPaletteIfNeeded } from './paletteAssigner.js';
 import { pathsMatch } from './pathKey.js';
 import type { SubagentWatch } from './subagentWatch.js';
@@ -284,6 +285,7 @@ export function ensureProjectScan(
   persistAgents: () => void,
   _onAgentCreated?: (agent: AgentState) => void,
   hooksEnabledRef?: { current: boolean },
+  liveOnlyRef?: { current: boolean },
 ): void {
   // Set deps for per-agent /clear detection (only on first call)
   if (!clearDetectionDeps) {
@@ -347,7 +349,12 @@ export function ensureProjectScan(
     }
 
     // When hooks are active, SessionStart handles new file detection.
+    // Live-only adopts top-level transcripts from the registry tick only.
+    // Teammate and background-agent scans above still run.
     if (hooksEnabledRef?.current) return;
+    if (!mayCreateDiscoveredTopLevel(liveOnlyRef?.current ?? false)) {
+      return;
+    }
 
     for (const dir of trackedProjectDirs) {
       scanForNewJsonlFiles(
@@ -695,6 +702,7 @@ export function scanForTeammateFiles(
       existingTeammate.lastDataAt = Date.now();
       existingTeammate.linesProcessed = 0;
       existingTeammate.isWaiting = false;
+      existingTeammate.awaitingInput = false;
       existingTeammate.teamUsesTmux = parentAgent?.teamUsesTmux;
       if (ownSessionId && existingTeammate.sessionId !== ownSessionId) {
         existingTeammate.sessionId = ownSessionId;
@@ -1084,9 +1092,7 @@ export function adoptExternalSessionFromHook(
 
     knownJsonlFiles.add(transcriptPath);
     const projectDir = path.dirname(transcriptPath);
-    const folderName =
-      folderNameResolver?.({ cwd, projectDir }) ??
-      folderNameFromProjectDir(path.basename(projectDir));
+    const folderName = externalFolderName(projectDir, cwd);
 
     adoptExternalSession(
       transcriptPath,
@@ -1155,7 +1161,7 @@ export function adoptExternalSessionFromHook(
   }
 }
 
-function adoptExternalSession(
+export function adoptExternalSession(
   jsonlFile: string,
   projectDir: string,
   nextAgentIdRef: { current: number },
@@ -1471,6 +1477,13 @@ function folderNameFromProjectDir(dirName: string): string {
   return parts[parts.length - 1] || dirName;
 }
 
+/** The folder an external session is shown under: the host's name for it, else the project dir's tail. */
+export function externalFolderName(projectDir: string, cwd?: string): string {
+  return (
+    folderNameResolver?.({ cwd, projectDir }) ?? folderNameFromProjectDir(path.basename(projectDir))
+  );
+}
+
 /** Scan every session root the active provider exposes for active sessions
  *  (global discovery — powers the "Watch All Sessions" toggle). */
 function scanGlobalProjectDirs(
@@ -1533,9 +1546,7 @@ function scanGlobalProjectDirs(
         continue;
       }
 
-      const folderName =
-        folderNameResolver?.({ projectDir: dirPath }) ??
-        folderNameFromProjectDir(path.basename(dirPath));
+      const folderName = externalFolderName(dirPath);
       knownJsonlFiles.add(file);
       console.log(
         `[Pixel Agents] Watcher: detected global session ${path.basename(file)} (${folderName})`,
@@ -1607,6 +1618,7 @@ export function reassignAgentToFile(
   permissionTimers: Map<number, ReturnType<typeof setTimeout>>,
 
   persistAgents: () => void,
+  bornAfter = Date.now() - EXTERNAL_SCAN_INTERVAL_MS * 2,
 ): void {
   const agent = agents.get(agentId);
   if (!agent) return;
@@ -1624,15 +1636,27 @@ export function reassignAgentToFile(
   cancelWaitingTimer(agentId, waitingTimers);
   cancelPermissionTimer(agentId, permissionTimers);
   clearAgentActivity(agent, agentId, agents, permissionTimers);
+  agent.midTurn = false;
 
   // Permanently dismiss old file so scanners never re-adopt it as external
   dismissalTracker!.permanentlyDismiss(agent.jsonlFile);
 
   // Swap to new file (update sessionId for hook registration).
   // Keep hookDelivered — if hooks worked before /clear, they'll work after.
+  agent.clearedFromSessionId = agent.sessionId;
   agent.sessionId = path.basename(newFilePath, '.jsonl');
   agent.jsonlFile = newFilePath;
   agent.fileOffset = 0;
+  try {
+    const stat = fs.statSync(newFilePath);
+    if (stat.birthtimeMs > 0 && stat.birthtimeMs < bornAfter) {
+      agent.fileOffset = stat.size;
+      agent.contextTokens = 0;
+      agent.sawMainChainUsage = false;
+    }
+  } catch {
+    /* start from beginning if stat fails */
+  }
   agent.lineBuffer = '';
   persistAgents();
 

@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { HooksConsentRequest } from '../../../core/src/messages.js';
+import type { HooksConsentRequest, OfficeRooms } from '../../../core/src/messages.js';
 import { playDoneSound, playPermissionSound, setSoundEnabled } from '../notificationSound.js';
 import type { ExistingAgentMeta, PendingAgent } from '../office/engine/existingAgents.js';
-import { reconcileExistingAgents } from '../office/engine/existingAgents.js';
+import {
+  agentsMissingFrom,
+  clearMissingTerminals,
+  isNewServer,
+  reconcileExistingAgents,
+  resetSurvivingStatus,
+} from '../office/engine/existingAgents.js';
 import type { OfficeState } from '../office/engine/officeState.js';
 import { setGhostHeadlessAgents as setRendererGhostHeadlessAgents } from '../office/engine/renderer.js';
 import { setFloorSprites } from '../office/floorTiles.js';
@@ -14,6 +20,7 @@ import { setPetTemplates } from '../office/sprites/petSpriteData.js';
 import { setCharacterTemplates } from '../office/sprites/spriteData.js';
 import {
   extractToolName,
+  isQuestionToolName,
   isSubagentToolName,
   setProviderCapabilities,
 } from '../office/toolUtils.js';
@@ -38,6 +45,21 @@ export interface SubagentCharacter {
   parentAgentId: number;
   parentToolId: string;
   label: string;
+}
+
+export interface AgentTerminalMeta {
+  name: string | null;
+  tmux: { session: string; windowId: string; paneId: string } | null;
+}
+
+function isTmuxLocation(value: unknown): value is NonNullable<AgentTerminalMeta['tmux']> {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.session === 'string' &&
+    typeof record.windowId === 'string' &&
+    typeof record.paneId === 'string'
+  );
 }
 
 interface FurnitureAsset {
@@ -100,6 +122,12 @@ interface ExtensionMessageState {
    *  pending install from a failed one, per provider — A's status is never a verdict on B's install. */
   hooksStatusSeq: Record<string, number>;
   hooksInfoShown: boolean;
+  /** existingAgents snapshots from the server this page belongs to; each one reopens the terminal socket. */
+  snapshots: number;
+  /** Live tmux metadata keyed by agent id. A null tmux closes the terminal panel. */
+  agentTerminals: Record<number, AgentTerminalMeta>;
+  /** Configured office rooms; null when the server has none. */
+  officeRooms: OfficeRooms | null;
   /** First-run consent ask (hooksConsentRequest). Non-null while the server waits on an answer; carries the provider
    *  and the server's exact disclosure copy, so the consent step renders the terms being approved with no client
    *  duplicate to drift. Cleared on answer/dismissal, and by a matching provider's hooksStatus installed=true. */
@@ -120,6 +148,7 @@ export function useExtensionMessages(
   getOfficeState: () => OfficeState,
   onLayoutLoaded?: (layout: OfficeLayout) => void,
   isEditDirty?: () => boolean,
+  flushLayoutSave?: () => void,
 ): ExtensionMessageState {
   const [agents, setAgents] = useState<number[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<number | null>(null);
@@ -130,6 +159,7 @@ export function useExtensionMessages(
   >({});
   const [subagentCharacters, setSubagentCharacters] = useState<SubagentCharacter[]>([]);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [snapshots, setSnapshots] = useState(0);
   const [layoutWasReset, setLayoutWasReset] = useState(false);
   const [loadedAssets, setLoadedAssets] = useState<
     { catalog: FurnitureAsset[]; sprites: Record<string, string[][]> } | undefined
@@ -151,8 +181,13 @@ export function useExtensionMessages(
   // than dropping it — the server sends one request per provider on the same handshake.
   const [consentQueue, setConsentQueue] = useState<HooksConsentRequest[]>([]);
   const consentRequest = consentQueue[0] ?? null;
+  // Providers whose tour ended on this page. A reconnect re-runs the handshake; it must not reopen the Intro.
+  const consentDismissedRef = useRef(new Set<string>());
   const [areaMappings, setAreaMappings] = useState<Record<string, string[]>>({});
   const [showAreas, setShowAreas] = useState(false);
+  const [agentTerminals, setAgentTerminals] = useState<Record<number, AgentTerminalMeta>>({});
+  const terminalsRef = useRef<Record<number, AgentTerminalMeta>>({});
+  const [officeRooms, setOfficeRooms] = useState<OfficeRooms | null>(null);
 
   // The renderer keeps its own module-level copy (read every rAF frame), so both
   // sources of truth move together — the persisted value on settingsLoaded and
@@ -170,10 +205,12 @@ export function useExtensionMessages(
   // agentToolsClear must NOT remove them — despawning and re-creating moved the
   // character to a new tile every turn. Cleared by subagentClear/agentClosed.
   const backgroundParentToolIdsRef = useRef<Record<number, Set<string>>>({});
+  const firstServerRef = useRef<{ serverId?: string }>({});
 
   useEffect(() => {
     // Buffer agents from existingAgents until layout is loaded
     let pendingAgents: PendingAgent[] = [];
+    let reloading = false;
 
     // Accumulate distinct folderNames seen across agents (never removed during the
     // session): the source for the Areas folder-mapping dropdown, so a folder stays
@@ -183,8 +220,62 @@ export function useExtensionMessages(
       setAgentFolderNames((prev) => (prev.includes(name) ? prev : [...prev, name]));
     };
 
+    const applyTerminal = (id: number, info: AgentTerminalMeta): void => {
+      terminalsRef.current = { ...terminalsRef.current, [id]: info };
+      setAgentTerminals(terminalsRef.current);
+      const ch = getOfficeState().characters.get(id);
+      if (!ch) return;
+      ch.sessionName = info.name;
+      ch.tmux = info.tmux;
+    };
+
+    const stampTerminal = (id: number): void => {
+      const info = terminalsRef.current[id];
+      if (!info) return;
+      const ch = getOfficeState().characters.get(id);
+      if (!ch) return;
+      ch.sessionName = info.name;
+      ch.tmux = info.tmux;
+    };
+
+    const closeAgent = (id: number): void => {
+      const os = getOfficeState();
+      setAgents((prev) => prev.filter((a) => a !== id));
+      setSelectedAgent((prev) => (prev === id ? null : prev));
+      setAgentTools((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setAgentStatuses((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setSubagentTools((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      // Remove all sub-agent characters belonging to this agent
+      delete backgroundParentToolIdsRef.current[id];
+      os.removeAllSubagents(id);
+      setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
+      os.removeAgent(id);
+      if (id in terminalsRef.current) {
+        const next = { ...terminalsRef.current };
+        delete next[id];
+        terminalsRef.current = next;
+        setAgentTerminals(next);
+      }
+    };
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const handler = (msg: any) => {
+      if (reloading) return;
       const os = getOfficeState();
       // CI / e2e diagnostic: record every received transport message on the
       // window-side log. The fixture reads window.__pixelAgentsTestHooks.
@@ -211,7 +302,13 @@ export function useExtensionMessages(
         setProviderCapabilities({
           readingTools: msg.readingTools,
           subagentToolNames: msg.subagentToolNames,
+          questionTools: msg.questionTools,
         });
+        return;
+      }
+
+      if (msg.type === 'officeRooms') {
+        setOfficeRooms(msg);
         return;
       }
 
@@ -234,6 +331,7 @@ export function useExtensionMessages(
         for (const p of pendingAgents) {
           os.addAgent(p.id, p.palette, p.hueShift, p.seatId, true, p.folderName);
           if (p.isHeadless) os.setHeadless(p.id, true);
+          stampTerminal(p.id);
         }
         pendingAgents = [];
         layoutReadyRef.current = true;
@@ -289,35 +387,29 @@ export function useExtensionMessages(
             os.setHeadless(id, true);
           }
         }
+        if (typeof msg.name === 'string' || msg.tmux != null) {
+          applyTerminal(id, {
+            name: typeof msg.name === 'string' ? msg.name : null,
+            tmux: isTmuxLocation(msg.tmux) ? msg.tmux : null,
+          });
+        }
         saveAgentSeats(os);
       } else if (msg.type === 'agentClosed') {
+        closeAgent(msg.id as number);
+      } else if (msg.type === 'agentTerminal') {
         const id = msg.id as number;
-        setAgents((prev) => prev.filter((a) => a !== id));
-        setSelectedAgent((prev) => (prev === id ? null : prev));
-        setAgentTools((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
+        applyTerminal(id, {
+          name: typeof msg.name === 'string' ? msg.name : null,
+          tmux: isTmuxLocation(msg.tmux) ? msg.tmux : null,
         });
-        setAgentStatuses((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        setSubagentTools((prev) => {
-          if (!(id in prev)) return prev;
-          const next = { ...prev };
-          delete next[id];
-          return next;
-        });
-        // Remove all sub-agent characters belonging to this agent
-        delete backgroundParentToolIdsRef.current[id];
-        os.removeAllSubagents(id);
-        setSubagentCharacters((prev) => prev.filter((s) => s.parentAgentId !== id));
-        os.removeAgent(id);
       } else if (msg.type === 'existingAgents') {
+        if (isNewServer(firstServerRef.current, msg.serverId) && isBrowserRuntime) {
+          reloading = true;
+          flushLayoutSave?.();
+          window.location.reload();
+          return;
+        }
+        setSnapshots((n) => n + 1);
         const incoming = msg.agents as number[];
         const meta = (msg.agentMeta || {}) as Record<number, ExistingAgentMeta>;
         const folderNames = (msg.folderNames || {}) as Record<number, string>;
@@ -344,21 +436,36 @@ export function useExtensionMessages(
         ) {
           saveAgentSeats(os);
         }
-        setAgents((prev) => {
-          const ids = new Set(prev);
-          const merged = [...prev];
-          for (const id of incoming) {
-            if (!ids.has(id)) {
-              merged.push(id);
-            }
+        for (const id of agentsMissingFrom(os.characters.keys(), incoming)) closeAgent(id);
+        resetSurvivingStatus(os, incoming);
+        for (const id of incoming) delete backgroundParentToolIdsRef.current[id];
+        setSubagentCharacters((prev) => prev.filter((s) => !incoming.includes(s.parentAgentId)));
+        setAgents([...incoming].sort((a, b) => a - b));
+        setAgentTools({});
+        setAgentStatuses({});
+        setSubagentTools({});
+        const incomingTerminals = msg.agentTerminals as
+          Record<string, { name?: string | null; tmux?: unknown }> | undefined;
+        terminalsRef.current = {};
+        setAgentTerminals(terminalsRef.current);
+        clearMissingTerminals(os.characters, incomingTerminals ?? {});
+        if (incomingTerminals) {
+          for (const [rawId, info] of Object.entries(incomingTerminals)) {
+            const id = Number(rawId);
+            if (!Number.isInteger(id)) continue;
+            applyTerminal(id, {
+              name: typeof info?.name === 'string' ? info.name : null,
+              tmux: isTmuxLocation(info?.tmux) ? info.tmux : null,
+            });
           }
-          return merged.sort((a, b) => a - b);
-        });
+        }
       } else if (msg.type === 'agentToolStart') {
         const id = msg.id as number;
         const toolId = msg.toolId as string;
         const status = msg.status as string;
         const permissionActive = msg.permissionActive as boolean | undefined;
+        const toolName = (msg.toolName as string | undefined) ?? extractToolName(status);
+        const question = isQuestionToolName(toolName);
         setAgentTools((prev) => {
           const list = prev[id] || [];
           if (list.some((t) => t.toolId === toolId)) return prev;
@@ -366,11 +473,10 @@ export function useExtensionMessages(
             ...prev,
             [id]: [
               ...list,
-              { toolId, status, done: false, permissionWait: permissionActive || false },
+              { toolId, status, done: false, permissionWait: permissionActive || false, question },
             ],
           };
         });
-        const toolName = (msg.toolName as string | undefined) ?? extractToolName(status);
         os.setAgentTool(id, toolName);
         os.setAgentActive(id, true);
         // Don't clear the permission bubble if the hook already confirmed permission is needed
@@ -691,7 +797,8 @@ export function useExtensionMessages(
         if (
           typeof msg.providerId === 'string' &&
           typeof msg.headline === 'string' &&
-          typeof msg.disclosure === 'string'
+          typeof msg.disclosure === 'string' &&
+          !consentDismissedRef.current.has(msg.providerId)
         ) {
           const request: HooksConsentRequest = {
             type: 'hooksConsentRequest',
@@ -783,16 +890,21 @@ export function useExtensionMessages(
     hooksStatusSeq,
     setHooksEnabled,
     hooksInfoShown,
+    snapshots,
+    agentTerminals,
+    officeRooms,
     consentRequest,
     // Called when a tour ends (answer + Let's Go, the X, Escape) with the providerId that tour was ABOUT, removing
     // that entry so the next provider's ask becomes the head. Keyed by id, not a blind shift: an answered ask's own
     // installed:true moot may already have removed the head, and a shift would then drop the NEXT provider's ask
-    // unanswered. An aborted ask returns on the next connect; the queue never re-adds it here.
+    // unanswered. An aborted ask returns on the next page load; the queue never re-adds it here.
     dismissConsentRequest: useCallback(
       (providerId: string | null) =>
-        setConsentQueue((q) =>
-          providerId === null ? q.slice(1) : q.filter((r) => r.providerId !== providerId),
-        ),
+        setConsentQueue((q) => {
+          const id = providerId ?? q[0]?.providerId;
+          if (id !== undefined) consentDismissedRef.current.add(id);
+          return providerId === null ? q.slice(1) : q.filter((r) => r.providerId !== providerId);
+        }),
       [],
     ),
     areaMappings,

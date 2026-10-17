@@ -1,8 +1,19 @@
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+// getTeamMembers reads ~/.claude/teams. Keep that off the real home: this
+// suite must not write Claude config, and os.homedir() is not always writable.
+let homeOverride = '';
+vi.mock('os', async () => {
+  const actual = await vi.importActual<typeof import('os')>('os');
+  return { ...actual, homedir: () => homeOverride || actual.homedir() };
+});
 
 import { claudeTeamProvider } from '../src/providers/hook/claude/claudeTeamProvider.js';
+
+homeOverride = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-team-home-'));
 
 describe('claudeTeamProvider', () => {
   describe('identity', () => {
@@ -388,8 +399,7 @@ describe('claudeTeamProvider', () => {
   });
 
   describe('getTeamMembers', () => {
-    // Writes under ~/.claude/teams/<TEAM_NAME>/ and cleans up in afterEach.
-    const fs = require('fs') as typeof import('fs');
+    // Writes under <temp home>/.claude/teams/<TEAM_NAME>/ and cleans up in afterEach.
     const TEAM_NAME = 'test-team-' + Date.now();
 
     afterEach(() => {
@@ -421,6 +431,43 @@ describe('claudeTeamProvider', () => {
       const result = claudeTeamProvider.getTeamMembers(TEAM_NAME);
       expect(result).not.toBeNull();
       expect([...result!].sort()).toEqual(['team-lead', 'web-researcher']);
+    });
+
+    it('reads a team config kept under a non-default config dir', () => {
+      fs.mkdirSync(path.join(os.homedir(), '.claude'), { recursive: true });
+      const teamDir = path.join(os.homedir(), '.claude-work', 'teams', TEAM_NAME);
+      fs.mkdirSync(teamDir, { recursive: true });
+      try {
+        fs.writeFileSync(
+          path.join(teamDir, 'config.json'),
+          JSON.stringify({ members: [{ name: 'team-lead' }, { name: 'tester' }] }),
+        );
+        const result = claudeTeamProvider.getTeamMembers(TEAM_NAME);
+        expect([...result!].sort()).toEqual(['team-lead', 'tester']);
+      } finally {
+        fs.rmSync(path.join(os.homedir(), '.claude-work'), { recursive: true, force: true });
+      }
+    });
+
+    it('unions the members of a team kept under several config dirs', () => {
+      const stale = path.join(os.homedir(), '.claude', 'teams', TEAM_NAME);
+      fs.mkdirSync(stale, { recursive: true });
+      fs.writeFileSync(
+        path.join(stale, 'config.json'),
+        JSON.stringify({ members: [{ name: 'lead' }] }),
+      );
+      const live = path.join(os.homedir(), '.claude-work', 'teams', TEAM_NAME);
+      fs.mkdirSync(live, { recursive: true });
+      try {
+        fs.writeFileSync(
+          path.join(live, 'config.json'),
+          JSON.stringify({ members: [{ name: 'tester' }] }),
+        );
+        const result = claudeTeamProvider.getTeamMembers(TEAM_NAME);
+        expect([...result!].sort()).toEqual(['lead', 'tester']);
+      } finally {
+        fs.rmSync(path.join(os.homedir(), '.claude-work'), { recursive: true, force: true });
+      }
     });
 
     it('returns null when config is not valid JSON', () => {

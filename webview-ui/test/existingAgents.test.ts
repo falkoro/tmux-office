@@ -23,7 +23,14 @@ import type {
   ExistingAgentsOffice,
   PendingAgent,
 } from '../src/office/engine/existingAgents.js';
-import { reconcileExistingAgents } from '../src/office/engine/existingAgents.js';
+import {
+  agentsMissingFrom,
+  clearMissingTerminals,
+  isNewServer,
+  reconcileExistingAgents,
+  resetSurvivingStatus,
+} from '../src/office/engine/existingAgents.js';
+import { OfficeState } from '../src/office/engine/officeState.js';
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -104,6 +111,19 @@ test('layout not ready: buffers restored agents for the later layoutLoaded flush
   ]);
 });
 
+test('layout not ready: a reconnect snapshot drops buffered agents it no longer lists', () => {
+  const os = fakeOffice();
+  const pending: PendingAgent[] = [];
+
+  reconcileExistingAgents(os, [5, 6], {}, {}, false, pending);
+  reconcileExistingAgents(os, [6], {}, {}, false, pending);
+
+  assert.deepEqual(
+    pending.map((p) => p.id),
+    [6],
+  );
+});
+
 // ── idempotence / dedup ─────────────────────────────────────────
 
 test('layout ready: skips an agent that already exists and reports nothing added', () => {
@@ -176,4 +196,73 @@ test('layout ready: agent with no metadata is still added with undefined fields'
       folderName: undefined,
     },
   ]);
+});
+
+// ── reconnect snapshot drops tmux placement it no longer vouches for ──
+
+test('reconnect: a character missing from the terminal snapshot loses its pane and name', () => {
+  const pane = { session: 'work', windowId: '@1', paneId: '%5' };
+  const gone: { tmux?: unknown; sessionName?: string | null } = { tmux: pane, sessionName: 'work' };
+  const kept: { tmux?: unknown; sessionName?: string | null } = { tmux: pane, sessionName: 'demo' };
+  const characters = new Map([
+    [1, gone],
+    [2, kept],
+  ]);
+
+  clearMissingTerminals(characters, { 2: { name: 'demo', tmux: pane } });
+
+  assert.equal(gone.tmux, null);
+  assert.equal(gone.sessionName, null);
+  assert.deepEqual(kept.tmux, pane);
+  assert.equal(kept.sessionName, 'demo');
+});
+
+test('reconnect: an agent the snapshot no longer lists is closed, its sub-agents are left to it', () => {
+  assert.deepEqual(agentsMissingFrom([1, 3, -1, 5], [1, 5, 7]), [3]);
+});
+
+test('reconnect: a surviving agent drops the status it showed before the drop', () => {
+  const os = new OfficeState();
+  os.addAgent(1);
+  os.addAgent(2);
+  os.setAgentTool(1, 'Bash');
+  os.setAgentActive(1, true);
+  os.showPermissionBubble(1);
+  os.showWaitingBubble(2);
+
+  resetSurvivingStatus(os, [1, 2]);
+
+  for (const id of [1, 2]) {
+    const ch = os.characters.get(id)!;
+    assert.equal(ch.isActive, false);
+    assert.equal(ch.currentTool, null);
+    assert.equal(ch.bubbleType, null);
+  }
+});
+
+test('an agent met between turns reads idle until the server reports a turn', () => {
+  const os = new OfficeState();
+  os.addAgent(1);
+  assert.equal(os.characters.get(1)!.isActive, false);
+
+  os.setAgentActive(1, true);
+  assert.equal(os.characters.get(1)!.isActive, true);
+});
+
+test('reconnect: a surviving agent loses its sub-agents until the replay recreates the live ones', () => {
+  const os = new OfficeState();
+  os.addAgent(1);
+  os.addSubagent(1, 'toolu_finished');
+
+  resetSurvivingStatus(os, [1]);
+
+  assert.equal(os.getSubagentId(1, 'toolu_finished'), null);
+});
+
+test('reconnect: only a snapshot from another server process counts as a new server', () => {
+  const seen = {};
+  assert.equal(isNewServer(seen, 'boot-a'), false, 'the first snapshot');
+  assert.equal(isNewServer(seen, 'boot-a'), false, 'a reconnect to the same server');
+  assert.equal(isNewServer(seen, undefined), false, 'a server that sends no id');
+  assert.equal(isNewServer(seen, 'boot-b'), true, 'a restarted server');
 });

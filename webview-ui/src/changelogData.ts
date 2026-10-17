@@ -21,9 +21,7 @@ export function toMajorMinor(version: string): string {
   return parts.length >= 2 ? `${parts[0]}.${parts[1]}` : version;
 }
 
-export const CHANGELOG_REPO_URL = 'https://github.com/pixel-agents-hq/pixel-agents';
-
-export const DISCORD_INVITE_URL = 'https://discord.gg/Yk7jXebv9H';
+export const CHANGELOG_REPO_URL = 'https://github.com/falkoro/tmux-office';
 
 export const changelogEntries: ChangelogEntry[] = [
   {

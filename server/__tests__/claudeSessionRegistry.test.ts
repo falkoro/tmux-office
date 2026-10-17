@@ -1,0 +1,332 @@
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { afterEach, describe, expect, it } from 'vitest';
+
+import { normalizeProjectPath } from '../../core/src/normalizeProjectPath.js';
+import { AgentRuntime } from '../src/agentRuntime.js';
+import { AgentStateStore } from '../src/agentStateStore.js';
+import { claudeProvider } from '../src/providers/hook/claude/claude.js';
+import {
+  ClaudeSessionRegistry,
+  parseSessionFile,
+  parseTmuxLocation,
+  type ProcReader,
+  transcriptPathForSession,
+} from '../src/providers/hook/claude/claudeSessionRegistry.js';
+
+const deadPid = 2_147_483_646;
+
+describe('parseTmuxLocation', () => {
+  it('parses session, window id and pane id', () => {
+    expect(parseTmuxLocation('work-6:@12.%12')).toEqual({
+      session: 'work-6',
+      windowId: '@12',
+      paneId: '%12',
+    });
+  });
+
+  it.each(['', 'work-6', 'work-6:12.12', '-bad:@1.%1', 'bad name:@1.%1', 'a;b:@1.%1'])(
+    'rejects %j',
+    (value) => {
+      expect(parseTmuxLocation(value)).toBeNull();
+    },
+  );
+});
+
+describe('parseSessionFile', () => {
+  const configDir = '/home/me/.claude-work';
+
+  it('reads the fields the registry keeps and ignores the rest', () => {
+    const raw = JSON.stringify({
+      pid: 7951,
+      sessionId: '44325277-1111-1111-1111-111111111111',
+      cwd: '/home/me/repos/reddit-fetch',
+      tmux: 'work-6:@12.%12',
+      status: 'idle',
+      name: 'reddit-fetch-88',
+      extra: { secret: 'nope' },
+    });
+    expect(parseSessionFile(raw, configDir)).toEqual({
+      pid: 7951,
+      sessionId: '44325277-1111-1111-1111-111111111111',
+      configDir,
+      cwd: '/home/me/repos/reddit-fetch',
+      tmux: { session: 'work-6', windowId: '@12', paneId: '%12' },
+      status: 'idle',
+      name: 'reddit-fetch-88',
+    });
+  });
+
+  it('strips a BOM and treats a missing tmux field as null', () => {
+    const parsed = parseSessionFile(
+      `\uFEFF${JSON.stringify({ pid: 4, sessionId: 's', cwd: '/work' })}`,
+      configDir,
+    );
+    expect(parsed?.tmux).toBeNull();
+    expect(parsed?.status).toBeNull();
+    expect(parsed?.name).toBeNull();
+  });
+
+  it('keeps a session whose tmux location does not parse, without a location', () => {
+    for (const tmux of ['my work:@1.%2', 'not-tmux', 42]) {
+      const parsed = parseSessionFile(
+        JSON.stringify({ pid: 4, sessionId: 's', cwd: '/work', tmux }),
+        configDir,
+      );
+      expect(parsed?.sessionId).toBe('s');
+      expect(parsed?.tmux).toBeNull();
+    }
+  });
+
+  it('drops a headless run and marks a name the user chose', () => {
+    const base = { pid: 4, sessionId: 's', cwd: '/work', name: 'zeta-3b' };
+    expect(
+      parseSessionFile(JSON.stringify({ ...base, entrypoint: 'sdk-cli' }), configDir),
+    ).toBeNull();
+    expect(
+      parseSessionFile(JSON.stringify({ ...base, entrypoint: 'cli' }), configDir)?.nameChosen,
+    ).toBeUndefined();
+    expect(
+      parseSessionFile(JSON.stringify({ ...base, nameSource: 'derived' }), configDir)?.nameChosen,
+    ).toBeUndefined();
+    expect(
+      parseSessionFile(JSON.stringify({ ...base, nameSource: 'user' }), configDir)?.nameChosen,
+    ).toBe(true);
+  });
+
+  it('drops a file whose pid is unusable', () => {
+    expect(
+      parseSessionFile(JSON.stringify({ pid: 0, sessionId: 's', cwd: '/work' }), configDir),
+    ).toBeNull();
+    expect(parseSessionFile('{', configDir)).toBeNull();
+  });
+});
+
+describe('ClaudeSessionRegistry', () => {
+  const dirs: string[] = [];
+
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  function home(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-sessions-'));
+    dirs.push(dir);
+    return dir;
+  }
+
+  function writeSession(root: string, configName: string, fileName: string, body: unknown): void {
+    const sessions = path.join(root, configName, 'sessions');
+    fs.mkdirSync(sessions, { recursive: true });
+    fs.writeFileSync(path.join(sessions, fileName), JSON.stringify(body));
+  }
+
+  it('drops a session whose pid now belongs to another process or pid namespace', () => {
+    const root = home();
+    const ns = 'pid:[4026531836]';
+    const stat = (start: string) =>
+      `${process.pid} (we) ird) S ${Array.from({ length: 18 }, (_, i) => i + 4).join(' ')} ${start} 0 0`;
+    const write = (file: string, sessionId: string, procStart: string, pidDomain: string) =>
+      writeSession(root, '.claude', file, {
+        pid: process.pid,
+        sessionId,
+        cwd: '/w',
+        procStart,
+        pidDomain,
+      });
+    write('1.json', 'same', '777', `linux:test-machine:${ns}`);
+    write('2.json', 'restarted', '555', `linux:test-machine:${ns}`);
+    write('3.json', 'container', '777', 'linux:test-machine:pid:[4026532999]');
+    const proc: ProcReader = { stat: () => stat('777'), pidNamespace: () => ns };
+    const registry = new ClaudeSessionRegistry({ homeDir: root, proc });
+    registry.refresh();
+    expect(registry.sessions().map((s) => s.sessionId)).toEqual(['same']);
+
+    const blind = new ClaudeSessionRegistry({
+      homeDir: root,
+      proc: { stat: () => null, pidNamespace: () => null },
+    });
+    blind.refresh();
+    expect(
+      blind
+        .sessions()
+        .map((s) => s.sessionId)
+        .sort(),
+    ).toEqual(['container', 'restarted', 'same']);
+  });
+
+  it.skipIf(process.getuid?.() === 0)('keeps sessions when the home listing fails once', () => {
+    const root = home();
+    writeSession(root, '.claude', '1.json', { pid: process.pid, sessionId: 'kept', cwd: '/w' });
+    const registry = new ClaudeSessionRegistry({ homeDir: root });
+    registry.refresh();
+    fs.chmodSync(root, 0o300);
+    try {
+      registry.refresh();
+    } finally {
+      fs.chmodSync(root, 0o700);
+    }
+    expect(registry.sessions().map((s) => s.sessionId)).toEqual(['kept']);
+  });
+
+  it('keeps live sessions from every config dir and drops dead, bak, and malformed files', () => {
+    const root = home();
+    writeSession(root, '.claude', '1.json', {
+      pid: process.pid,
+      sessionId: 'live-a',
+      cwd: '/work/a',
+      tmux: 'demo:@1.%2',
+      status: 'busy',
+      name: 'alpha',
+    });
+    writeSession(root, '.claude-work', '2.json', {
+      pid: process.pid,
+      sessionId: 'live-b',
+      cwd: '/work/b',
+      name: 'beta',
+    });
+    writeSession(root, '.claude', 'dead.json', {
+      pid: deadPid,
+      sessionId: 'dead',
+      cwd: '/work/dead',
+    });
+    writeSession(root, '.claude', 'bad.json', '{');
+    fs.mkdirSync(path.join(root, '.claude.bak-old', 'sessions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, '.claude.bak-old', 'sessions', '9.json'),
+      JSON.stringify({ pid: process.pid, sessionId: 'bak', cwd: '/nope' }),
+    );
+
+    const registry = new ClaudeSessionRegistry({ homeDir: root });
+    expect(registry.size()).toBe(0);
+    registry.refresh();
+    expect(registry.size()).toBe(2);
+    expect(registry.get('live-a')?.tmux).toEqual({ session: 'demo', windowId: '@1', paneId: '%2' });
+    expect(registry.get('live-b')?.tmux).toBeNull();
+    expect(registry.get('dead')).toBeUndefined();
+    expect(registry.get('bak')).toBeUndefined();
+  });
+
+  it('prefers the duplicate that names a tmux pane', () => {
+    const root = home();
+    writeSession(root, '.claude', 'a.json', {
+      pid: process.pid,
+      sessionId: 'same',
+      cwd: '/work',
+    });
+    writeSession(root, '.claude-work', 'b.json', {
+      pid: process.pid,
+      sessionId: 'same',
+      cwd: '/work',
+      tmux: 'demo:@3.%4',
+    });
+    const registry = new ClaudeSessionRegistry({ homeDir: root });
+    registry.refresh();
+    expect(registry.get('same')?.configDir).toBe(path.join(root, '.claude-work'));
+    expect(registry.get('same')?.tmux?.paneId).toBe('%4');
+  });
+
+  it('keeps a session whose file reads short mid-rewrite, and drops it once the file is gone', () => {
+    const root = home();
+    const body = { pid: process.pid, sessionId: 'busy', cwd: '/work', name: 'alpha' };
+    writeSession(root, '.claude', '1.json', body);
+    const registry = new ClaudeSessionRegistry({ homeDir: root });
+    registry.refresh();
+    expect(registry.get('busy')?.name).toBe('alpha');
+
+    const file = path.join(root, '.claude', 'sessions', '1.json');
+    fs.writeFileSync(file, JSON.stringify(body).slice(0, 12));
+    registry.refresh();
+    expect(registry.get('busy')?.name).toBe('alpha');
+
+    fs.rmSync(file);
+    registry.refresh();
+    expect(registry.get('busy')).toBeUndefined();
+  });
+});
+
+describe('live session adoption', () => {
+  const dirs: string[] = [];
+  let runtime: AgentRuntime | undefined;
+
+  afterEach(() => {
+    runtime?.dispose();
+    runtime = undefined;
+    for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  function home(): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pxl-live-'));
+    dirs.push(dir);
+    return dir;
+  }
+
+  function plant(root: string, watch: 'all' | 'tracked' | 'off'): AgentStateStore {
+    const cwd = path.join(root, 'work');
+    fs.mkdirSync(cwd, { recursive: true });
+    const sessionId = '11111111-1111-1111-1111-111111111111';
+    const projectDir = path.join(root, '.claude-work', 'projects', normalizeProjectPath(cwd));
+    fs.mkdirSync(projectDir, { recursive: true });
+    const jsonl = path.join(projectDir, `${sessionId}.jsonl`);
+    fs.writeFileSync(jsonl, '{"type":"user"}\n');
+    const old = new Date(Date.now() - 60 * 60 * 1000);
+    fs.utimesSync(jsonl, old, old);
+    fs.mkdirSync(path.join(root, '.claude-work', 'sessions'), { recursive: true });
+    fs.writeFileSync(
+      path.join(root, '.claude-work', 'sessions', '1.json'),
+      JSON.stringify({
+        pid: process.pid,
+        sessionId,
+        cwd,
+        tmux: 'demo:@2.%3',
+        status: 'idle',
+        name: 'zeta',
+      }),
+    );
+
+    const store = new AgentStateStore();
+    runtime = new AgentRuntime(store, claudeProvider);
+    if (watch === 'tracked') runtime.startProjectScan(projectDir);
+    if (watch === 'all') runtime.forceWatchAll = true;
+    runtime.startLiveSessionRegistry(
+      new ClaudeSessionRegistry({ homeDir: root }),
+      async () => null,
+    );
+    return store;
+  }
+
+  it('adopts a small old transcript when watch-all is forced', () => {
+    const store = plant(home(), 'all');
+    expect(store.size).toBe(1);
+    const agent = [...store.values()][0];
+    expect(agent?.registryName).toBe('zeta');
+    expect(agent?.tmux).toEqual({ session: 'demo', windowId: '@2', paneId: '%3' });
+  });
+
+  it('adopts a seeded transcript in a tracked project dir', () => {
+    const store = plant(home(), 'tracked');
+    expect(store.size).toBe(1);
+    expect([...store.values()][0]?.tmux?.paneId).toBe('%3');
+  });
+
+  it('does not adopt when watch-all is off and the project dir is untracked', () => {
+    const store = plant(home(), 'off');
+    expect(store.size).toBe(0);
+  });
+
+  it('resolves the transcript path', () => {
+    const root = home();
+    const cwd = path.join(root, 'Work');
+    const sessionId = 'abc';
+    const projectDir = path.join(root, '.claude', 'projects', normalizeProjectPath(cwd));
+    fs.mkdirSync(projectDir, { recursive: true });
+    fs.writeFileSync(path.join(projectDir, `${sessionId}.jsonl`), '{}\n');
+    const session = parseSessionFile(
+      JSON.stringify({ pid: 1, sessionId, cwd, tmux: null }),
+      path.join(root, '.claude'),
+    );
+    expect(session).not.toBeNull();
+    expect(transcriptPathForSession(session!)).toBe(path.join(projectDir, `${sessionId}.jsonl`));
+  });
+});

@@ -1,6 +1,6 @@
 # Pixel Agents e2e tests
 
-Playwright end-to-end tests for the VS Code extension and the standalone `npx pixel-agents` server. This README is the single source of truth for what's e2e-tested, what's not, and how to run the suite.
+Playwright end-to-end tests for the VS Code extension and the standalone `node dist/cli.js` server. This README is the single source of truth for what's e2e-tested, what's not, and how to run the suite.
 
 ## What this suite covers
 
@@ -28,7 +28,7 @@ Every spawn permutation (internal vs external origin × basic vs inline-teammate
 
 ### Standalone server (`@area:standalone`)
 
-The `npx pixel-agents` CLI path: hook-driven lifecycle propagates from the local server into the browser SPA via the single `/ws` WebSocket endpoint.
+The `node dist/cli.js` CLI path: hook-driven lifecycle propagates from the local server into the browser SPA via the single `/ws` WebSocket endpoint.
 
 ### Pet system (`@area:pets`)
 
@@ -47,9 +47,9 @@ Scenarios that exist as product behavior but are not in the automated suite. PRs
 | Heuristic-timer cancellation after **internal-terminal** agent close                     | VS Code terminal panel collapse races the canvas click on the X overlay; covered via the external-agent variant which dodges the layout race | external variant in suite    |
 | Producer/viewer relay scenarios (multi-viewer replay, producer reconnect reconciliation) | Producer endpoint not yet built                                                                                                              | `feat/producer-viewer-split` |
 
-## Pre-release manual smoke (~30 min)
+## Manual smoke (~30 min)
 
-CI green on this suite is the safety net for behavioral regressions. The checks below are what e2e can't meaningfully assert on (visual polish, real-Claude integration, cross-process behaviors). Run them before tagging a Marketplace release — not on every PR.
+CI green on this suite is the safety net for behavioral regressions. The checks below are what e2e can't meaningfully assert on (visual polish, real-Claude integration, cross-process behaviors). Run them after a change to the areas named below, or after a Claude Code upgrade — not on every PR.
 
 **Visual + interactive polish** (after any change touching `renderer.ts`, `spriteCache.ts`, `colorize.ts`, `*.tsx`, CSS, or `editorActions.ts`):
 
@@ -64,16 +64,16 @@ CI green on this suite is the safety net for behavioral regressions. The checks 
 - Use a session with a large pasted image (multi-MB base64 user message) — confirm the "Possible format issue" warning doesn't false-fire and tool tracking still works.
 - Test with one MCP server installed — confirm `mcp_progress` records don't break tool status.
 
-**`npx pixel-agents` standalone** (e2e covers Chrome via Playwright; verify other browsers + real workflow):
+**`node dist/cli.js` standalone** (e2e covers Chrome via Playwright; verify other browsers + real workflow):
 
-- `node dist/cli.js` (or `npx pixel-agents` after publish), open `http://localhost:3100` in Firefox AND Safari, run a real Claude session in a terminal — confirm characters appear and animate via WebSocket.
+- `node dist/cli.js`, open `http://localhost:3100` in Firefox AND Safari, run a real Claude session in a terminal — confirm characters appear and animate via WebSocket.
 - Refresh the browser mid-session — WebSocketTransport reconnects, agents reappear from server state.
 
 **Cross-window sync** (rarely covered by CI, easy to break):
 
 - Open two VS Code windows. Edit the layout in one (paint a tile, save). Within ~2 s the other window picks it up.
 
-**First-run experience** (before publishing):
+**First-run experience** (after any change to the Intro or the hook installer):
 
 - Delete `~/.pixel-agents/` entirely. Launch the extension fresh — default layout loads, first-run tooltip appears, no console errors, hooks auto-install on first agent spawn.
 

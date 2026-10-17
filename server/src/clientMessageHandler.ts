@@ -1,3 +1,6 @@
+import * as crypto from 'crypto';
+import * as path from 'path';
+
 import type { HookProvider } from '../../core/src/provider.js';
 import { resendAgentActivity } from './agentActivityResend.js';
 import { buildAgentDiagnostics } from './agentDiagnostics.js';
@@ -13,10 +16,14 @@ import {
 } from './configPersistence.js';
 import { HUE_SHIFT_MAX_DEG, PALETTE_COUNT } from './constants.js';
 import { readLayoutFromFile, writeLayoutToFile } from './layoutPersistence.js';
+import { agentTerminalMap } from './liveSessionSync.js';
 import type { ConsentEffects } from './providers/hook/consentExecutor.js';
 import { applyConsentChoice } from './providers/hook/consentExecutor.js';
 import { hooksConsentRequest } from './providers/hook/consentGate.js';
 import { claudeProvider, hookProviderById, hookProviders } from './providers/index.js';
+
+/** Minted once per server process, so a client can tell a restarted server from a reconnect. */
+const SERVER_ID = crypto.randomUUID();
 
 type WsSend = (message: Record<string, unknown>) => void;
 
@@ -99,7 +106,15 @@ export function handleClientMessage(
       const id = msg.id as number;
       const agent = store.get(id);
       if (agent && runtime) {
-        runtime.dismissalTracker.dismiss(agent.jsonlFile);
+        runtime.dismissalTracker.close(agent.jsonlFile);
+        runtime.dismissalTracker.close(
+          path.join(path.dirname(agent.jsonlFile), `${agent.sessionId}.jsonl`),
+        );
+        for (const teammate of store.values()) {
+          if (teammate.leadAgentId === id) runtime.dismissalTracker.close(teammate.jsonlFile);
+        }
+        runtime.removeTeammates(id);
+        runtime.subagentWatch.removeByLead(id);
         runtime.removeAgent(id);
       }
       break;
@@ -175,7 +190,8 @@ export function handleClientMessage(
     case 'setWatchAllSessions': {
       const enabled = msg.enabled as boolean;
       adapter?.setSetting(KEY_WATCH_ALL_SESSIONS, enabled);
-      if (runtime) runtime.watchAllSessions.current = enabled;
+      // `--watch-all` stays on for this process even if the checkbox is cleared.
+      if (runtime) runtime.watchAllSessions.current = runtime.forceWatchAll || enabled;
       break;
     }
 
@@ -364,7 +380,9 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
     type: 'providerCapabilities',
     readingTools: [...claudeProvider.readingTools],
     subagentToolNames: [...claudeProvider.subagentToolNames],
+    questionTools: [...(claudeProvider.questionTools ?? [])],
   });
+  if (runtime?.officeRooms) send({ ...runtime.officeRooms });
 
   // 2. Assets (from server cache, loaded at startup via pngjs)
   if (cache) {
@@ -404,7 +422,8 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
 
   // 4. Settings (from adapter, with sensible defaults when adapter is absent)
   const cfg = readConfig();
-  const watchAllSessions = adapter?.getSetting(KEY_WATCH_ALL_SESSIONS, false) ?? false;
+  const persistedWatchAll = adapter?.getSetting(KEY_WATCH_ALL_SESSIONS, false) ?? false;
+  const watchAllSessions = (runtime?.forceWatchAll ?? false) || persistedWatchAll;
   // settingsLoaded.hooksEnabled stays a single boolean carrying the CLAUDE
   // provider's preference until the Settings UI grows a per-provider list —
   // its sole webview reader is the hooks tooltip gate.
@@ -498,12 +517,15 @@ function handleWebviewReady(send: WsSend, ctx: ClientMessageContext): void {
       seatId: persisted?.seatId,
     };
   }
+  const agentTerminals = agentTerminalMap(store);
   send({
     type: 'existingAgents',
+    serverId: SERVER_ID,
     agents: agentIds,
     agentMeta,
     folderNames,
     externalAgents,
+    ...(Object.keys(agentTerminals).length > 0 ? { agentTerminals } : {}),
   });
 
   // 7. Layout last (see step 3): flushes the webview's buffered existingAgents

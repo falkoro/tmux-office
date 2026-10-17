@@ -310,6 +310,29 @@ describe('transcriptParser: teammate spawn results (new-harness implicit teams)'
     expect(teammate.isTeamLead).toBe(false);
   });
 
+  it('keeps the open tools when a meta record with array content arrives mid-turn', () => {
+    processTranscriptLine(
+      1,
+      agentToolUseRecord('toolu_1', 'Bash', { command: 'ls' }),
+      agents,
+      waitingTimers,
+      permissionTimers,
+    );
+    processTranscriptLine(
+      1,
+      JSON.stringify({
+        type: 'user',
+        isMeta: true,
+        message: { content: [{ type: 'text', text: 'Base directory for this skill: /skills/x' }] },
+      }),
+      agents,
+      waitingTimers,
+      permissionTimers,
+    );
+    expect(agent.activeToolIds.has('toolu_1')).toBe(true);
+    expect(messages.some((msg) => msg.type === 'agentToolsClear')).toBe(false);
+  });
+
   it('still parks old-style async agent launches as background tools', () => {
     processTranscriptLine(
       1,

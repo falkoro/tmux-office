@@ -1,6 +1,6 @@
 # Pixel Agents — Compressed Reference
 
-Pixel art office where AI agents (Claude Code terminals today, any tool tomorrow) become animated characters. Ships as a **VS Code extension** and an **`npx pixel-agents` standalone CLI** from the same source tree.
+Pixel art office where AI agents (Claude Code terminals today, any tool tomorrow) become animated characters. Runs from source as a **VS Code extension** and a **standalone CLI** (`node dist/cli.js`) from the same source tree.
 
 `CONTEXT.md` is the canonical glossary — read it for what terms like Agent, Sub-agent, Teammate, Lead, Adopt, or Headless agent mean here, and use its vocabulary in code, comments, and docs.
 
@@ -39,10 +39,13 @@ server/                              Lifecycle runtime + Fastify HTTP/WS server
     sessionRouter.ts                 session_id → agent_id mapping, event buffering, pending external sessions
     dismissalTracker.ts              Unified dismissal state (replaces four legacy globals)
     hookEventHandler.ts              Dispatches normalized AgentEvent into runtime
-    httpServer.ts                    Fastify: POST /api/hooks/:providerId, GET /api/health, GET /ws, SPA (standalone)
+    httpServer.ts                    Fastify: POST /api/hooks/:providerId, GET /api/health, GET /api/office, GET /ws, GET /ws/term, SPA (standalone)
+    officeFeed.ts                    /api/office JSON snapshot: desks with room, session, pin and status
+    tmuxTerminal.ts                  /ws/term: attaches an agent's tmux pane through node-pty (loaded on first attach)
+    accessJwt.ts                     Cloudflare Access JWT check (JWKS cache), run on every route but the hook post
     clientMessageHandler.ts          Single dispatch point for ClientMessage from webview
     server.ts                        Top-level composition
-    cli.ts                           npx pixel-agents entry (npm bin)
+    cli.ts                           Standalone CLI entry (`node dist/cli.js`)
     fileStateAdapter.ts              Namespaced ~/.pixel-agents/ persistence
     configPersistence.ts             { vscode, standalone, externalAssetDirectories, hooksConsent: {providerId: granted|declined}, hooksEnabled: {providerId: boolean} }
     layoutPersistence.ts             ~/.pixel-agents/layout.json with atomic tmp+rename
@@ -53,7 +56,7 @@ server/                              Lifecycle runtime + Fastify HTTP/WS server
     teamUtils.ts                     isInlineTeammateOf, getInlineTeammates, hasInlineTeammates
     types.ts                         ServerAgentState
     constants.ts                     All timing/scanning constants
-  __tests__/                         28 Vitest files
+  __tests__/                         39 Vitest files
   manual-hook-events.http            Manual hook testing helper (REST-Client format)
 
 adapters/vscode/                     VS Code surface — composes core + server
@@ -89,6 +92,7 @@ webview-ui/                          React 19 + Canvas UI (depends only on core/
       useEditorKeyboard.ts           Keyboard shortcuts (R, T, Esc, Ctrl+Z/Y)
       introTourState.ts              Intro tour wire-state machine (pure reducer, Node-runner tested)
       useIntroTour.ts                Wires the reducer to React + transport (snapshot, verdict, choices)
+    office3d/                        three.js 3D office: scene, layout (rooms, pods, rosters), walk mode, characters
     office/
       types.ts                       OfficeLayout, Character, etc. + re-exports constants
       toolUtils.ts                   STATUS_TO_TOOL mapping, extractToolName (DOM-free; defaultZoom lives in useEditorActions)
@@ -160,12 +164,9 @@ webview-ui/                          npm workspace
 
 ## Distribution
 
-Two artifacts from one source tree:
+This fork publishes nothing: it is not on the VS Code Marketplace, Open VSX or npm. It runs from source — `npm run build`, then `node dist/cli.js [--port 3100]` serves the Fastify server and the SPA on the same port. The VS Code extension builds from the same tree (`dist/extension.js`, F5 for the Extension Development Host).
 
-- **VS Code extension** (`.vsix`) — `pablodelucca.pixel-agents` on VS Code Marketplace and Open VSX. Bundles VS Code adapter + webview SPA + assets + hook scripts.
-- **npm package** (`pixel-agents`) — `npx pixel-agents [--port 3100]` runs the Fastify server and serves the SPA on the same port. Bundles CLI + webview SPA + assets + hook scripts + `core/asyncapi.yaml` (so third-party clients can regenerate from it).
-
-`package.json:files` allowlist controls the npm tarball: `dist/cli.js{,.map}`, `dist/webview/`, `dist/assets/`, `dist/hooks/`, `core/asyncapi.yaml`, `icon.png`. `dist/extension.js` is intentionally excluded since the VS Code entry ships through the `.vsix`.
+`package.json` keeps the upstream package name (`pixel-agents`) and extension id (`pablodelucca.pixel-agents`), along with its `files` allowlist, only so the code stays mergeable with upstream.
 
 ## Communication Flow
 
@@ -196,8 +197,8 @@ Adding a new CLI integration is one subdirectory under `server/src/providers/hoo
 
 `core/asyncapi.yaml` is the contract. Pinned to **3.0.0** because `@asyncapi/modelina@5.10.1` declares `supportedVersions: ['3.0.0']` only; bumping to 3.1.0 produces `export type Root = any`. Revisit when Modelina ships 3.1.0 support.
 
-- **27 ServerMessage variants** (server → client): agent lifecycle, agent activity, sub-agent activity, team + context usage, assets, settings + workspace, diagnostics.
-- **18 ClientMessage variants** (client → server): lifecycle (`webviewReady`, `launchAgent`, `focusAgent`, `closeAgent`), layout (`saveAgentSeats`, `saveLayout`, `exportLayout`, `importLayout`), settings (`setSoundEnabled`, `setHooksEnabled`, `setWatchAllSessions`, `setAlwaysShowLabels`, `setHooksInfoShown`, `setLastSeenVersion`), discovery + assets, diagnostics.
+- **33 ServerMessage variants** (server → client): agent lifecycle (including `agentTerminal`, an agent's tmux location and name), agent activity, sub-agent activity, team + context usage, assets, settings + workspace (including `officeRooms`, the 3D office's room config), diagnostics.
+- **22 ClientMessage variants** (client → server): lifecycle (`webviewReady`, `launchAgent`, `focusAgent`, `closeAgent`), layout (`saveAgentSeats`, `saveLayout`, `exportLayout`, `importLayout`), settings (`setSoundEnabled`, `setHooksEnabled`, `setWatchAllSessions`, `setAlwaysShowLabels`, `setHooksInfoShown`, `setLastSeenVersion`), discovery + assets, diagnostics.
 
 Both unions use `oneOf` with `discriminator: type`. Every concrete message sets `additionalProperties: false`.
 
@@ -299,7 +300,9 @@ Fastify v5 with `@fastify/cors`, `@fastify/websocket`, and (in standalone) `@fas
 | ------ | ------------------------ | --------------------------------------- |
 | POST   | `/api/hooks/:providerId` | Bearer-authenticated hook event ingress |
 | GET    | `/api/health`            | Liveness: `{ ok, version, port, pid }`  |
+| GET    | `/api/office`            | Office feed JSON (desks, rooms, status) |
 | GET    | `/ws`                    | Bidirectional protocol channel          |
+| GET    | `/ws/term`               | An agent's tmux pane as a terminal      |
 | GET    | `/*` (standalone only)   | Webview SPA via `@fastify/static`       |
 
 `/ws` is gated in **two tiers**, because `setHooksEnabled(true)` over this socket is a durable, machine-wide consent grant plus a hook install.
@@ -643,7 +646,7 @@ Supporting: `wall-tile-editor.html` (wall sprite editing), `jsonl-viewer.html` (
 
 ## Project Identity
 
-- Extension ID: `pablodelucca.pixel-agents` (VS Code Marketplace + Open VSX)
-- npm package: `pixel-agents` (CLI bin: `pixel-agents`)
-- GitHub: `https://github.com/pixel-agents-hq/pixel-agents`
+- Not published to the VS Code Marketplace, Open VSX or npm; runs from source (`npm run build`, then `node dist/cli.js`)
+- `package.json` keeps the upstream package name `pixel-agents` and extension id `pablodelucca.pixel-agents` only to stay mergeable with upstream
+- GitHub: `https://github.com/falkoro/tmux-office`, built on `https://github.com/pixel-agents-hq/pixel-agents`
 - License: MIT
