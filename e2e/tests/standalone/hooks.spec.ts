@@ -73,15 +73,20 @@ test.describe('Standalone / hooks', () => {
       session_id: sessionId,
       hook_event_name: 'PostToolUse',
     });
-    const postToolMessages = await standalone.drainMessages();
-    expect(
-      postToolMessages.some(
-        (message) =>
-          message.type === 'agentToolDone' &&
-          message.toolId === toolStart?.toolId &&
-          message.id === toolStart?.id,
-      ),
-    ).toBe(true);
+    // PostToolUse changes nothing visible (the permission bubble stays), so there is no
+    // overlay to wait on: poll the recorder until the frame has crossed the WebSocket.
+    const postToolMessages: RecordedServerMessage[] = [];
+    await expect
+      .poll(async () => {
+        postToolMessages.push(...(await standalone.drainMessages()));
+        return postToolMessages.some(
+          (message) =>
+            message.type === 'agentToolDone' &&
+            message.toolId === toolStart?.toolId &&
+            message.id === toolStart?.id,
+        );
+      })
+      .toBe(true);
     await expectOverlayVisible(page, 'Needs approval');
 
     await sendHookEvent(standalone.hookServerConfig, {
