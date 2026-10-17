@@ -4,7 +4,7 @@ A 3D office for the Claude Code sessions in your tmux. Each tmux session is a po
 
 ![Seven tmux sessions in one room, a pinned session in front, and three agents on the porch behind them](docs/office3d/office.png)
 
-Watch [the 57-second tour](docs/media/tmux-office-tour.mp4). Its music is "Lofi Chill" by ZephiraMusic from Pixabay, under the Pixabay Content License.
+Watch [the 57-second tour](docs/media/tmux-office-tour.mp4).
 
 tmux office is built on [Pixel Agents](https://github.com/pixel-agents-hq/pixel-agents) (MIT). It keeps the Pixel Agents server, hooks, and pixel view. It adds a three.js office, tmux rooms, a terminal panel per desk, and a read-only JSON feed.
 
